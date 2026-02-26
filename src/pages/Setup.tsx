@@ -13,6 +13,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { sbFetch } from '../services/supabase';
 
 const sqlScript = `-- ═══════════════════════════════════════════════════════════
 -- نظام إدارة الاختبارات الذكي — سكريبت قاعدة البيانات الكامل
@@ -107,9 +108,14 @@ export const Setup: React.FC = () => {
           سيؤدي هذا الإجراء إلى مسح جميع بيانات الطلاب المسجلة حالياً في قاعدة البيانات. يرجى التأكد قبل المتابعة حيث لا يمكن التراجع عن هذا الإجراء.
         </p>
         <button 
-          onClick={() => {
+          onClick={async () => {
             if(confirm('هل أنت متأكد من رغبتك في مسح جميع بيانات الطلاب؟ لا يمكن التراجع عن هذا الإجراء.')) {
-              alert('تم مسح بيانات الطلاب بنجاح (محاكاة)');
+              const res = await sbFetch('students', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+              if (res) {
+                alert('تم مسح جميع بيانات الطلاب بنجاح');
+              } else {
+                alert('حدث خطأ أثناء مسح البيانات. تأكد من إعدادات Supabase.');
+              }
             }
           }}
           className="px-8 py-3 bg-red/10 border border-red/20 text-red font-bold rounded-xl hover:bg-red hover:text-white transition-all flex items-center gap-2"

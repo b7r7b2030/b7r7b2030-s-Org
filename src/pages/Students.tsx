@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, 
   Upload, 
@@ -10,23 +10,100 @@ import {
   Phone,
   Filter,
   MoreVertical,
-  Info
+  Info,
+  Loader2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Student } from '../types';
-
-const initialStudents: Student[] = [
-  { student_no: '20241001', full_name: 'أحمد محمد علي السعيد', grade: 'الرابع', classroom: 'A', phone: '0512345678' },
-  { student_no: '20241002', full_name: 'خالد سعد الدوسري', grade: 'الرابع', classroom: 'A', phone: '0523456789' },
-  { student_no: '20241003', full_name: 'فيصل عبدالله القحطاني', grade: 'الرابع', classroom: 'A', phone: '0534567890' },
-  { student_no: '20241004', full_name: 'عمر ناصر الغامدي', grade: 'الثالث', classroom: 'B', phone: '0545678901' },
-  { student_no: '20241005', full_name: 'يوسف علي المالكي', grade: 'الثالث', classroom: 'B', phone: '0556789012' },
-];
+import { sbFetch } from '../services/supabase';
 
 export const Students: React.FC = () => {
-  const [students, setStudents] = useState<Student[]>(initialStudents);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('الكل');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    student_no: '',
+    full_name: '',
+    grade: 'الأول',
+    classroom: '',
+    phone: ''
+  });
+
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const fetchStudents = async () => {
+    setLoading(true);
+    const data = await sbFetch<Student>('students', 'GET', null, '?select=*&order=full_name');
+    if (data) {
+      setStudents(data);
+    }
+    setLoading(false);
+  };
+
+  const handleAddStudent = async () => {
+    if (!formData.student_no || !formData.full_name) {
+      alert('يرجى تعبئة الحقول الإلزامية');
+      return;
+    }
+
+    const res = await sbFetch<Student>('students', 'POST', formData);
+    if (res) {
+      alert('تم إضافة الطالب بنجاح');
+      setFormData({ student_no: '', full_name: '', grade: 'الأول', classroom: '', phone: '' });
+      fetchStudents();
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('هل أنت متأكد من حذف هذا الطالب؟')) return;
+    const res = await sbFetch('students', 'DELETE', null, `?id=eq.${id}`);
+    if (res) {
+      fetchStudents();
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const content = event.target?.result as string;
+      const lines = content.split('\n').filter(l => l.trim());
+      const headers = lines[0].split(',').map(h => h.trim());
+      
+      const studentsToImport = lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+        return {
+          student_no: values[0],
+          full_name: values[1],
+          grade: values[2],
+          classroom: values[3],
+          phone: values[4]
+        };
+      }).filter(s => s.student_no && s.full_name);
+
+      let successCount = 0;
+      for (const student of studentsToImport) {
+        const res = await sbFetch('students', 'POST', student);
+        if (res) successCount++;
+      }
+
+      alert(`تم استيراد ${successCount} طالب بنجاح`);
+      setImporting(false);
+      fetchStudents();
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsText(file);
+  };
 
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.full_name.includes(search) || s.student_no.includes(search);
@@ -43,11 +120,32 @@ export const Students: React.FC = () => {
             <Upload size={18} className="text-accent" />
             استيراد بيانات الطلاب
           </h3>
-          <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center cursor-pointer hover:bg-accent/5 hover:border-accent transition-all group">
+          
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            accept=".csv" 
+            className="hidden" 
+          />
+
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            className={cn(
+              "border-2 border-dashed border-border rounded-2xl p-10 text-center cursor-pointer hover:bg-accent/5 hover:border-accent transition-all group",
+              importing && "pointer-events-none opacity-50"
+            )}
+          >
             <div className="w-16 h-16 bg-bg3 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-              <Upload size={32} className="text-text3 group-hover:text-accent" />
+              {importing ? (
+                <Loader2 size={32} className="text-accent animate-spin" />
+              ) : (
+                <Upload size={32} className="text-text3 group-hover:text-accent" />
+              )}
             </div>
-            <h4 className="font-bold text-text mb-2">رفع ملف Excel أو CSV</h4>
+            <h4 className="font-bold text-text mb-2">
+              {importing ? 'جاري الاستيراد...' : 'رفع ملف CSV'}
+            </h4>
             <p className="text-xs text-text3 max-w-xs mx-auto">الحقول المطلوبة: رقم الطالب، اسم الطالب، الصف، الفصل، رقم الجوال</p>
           </div>
           
@@ -59,29 +157,56 @@ export const Students: React.FC = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text2">رقم الطالب *</label>
-              <input className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" placeholder="مثال: 20241001" />
+              <input 
+                className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                placeholder="مثال: 20241001"
+                value={formData.student_no}
+                onChange={(e) => setFormData({...formData, student_no: e.target.value})}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text2">اسم الطالب *</label>
-              <input className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" placeholder="الاسم الرباعي" />
+              <input 
+                className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                placeholder="الاسم الرباعي"
+                value={formData.full_name}
+                onChange={(e) => setFormData({...formData, full_name: e.target.value})}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text2">الصف *</label>
-              <select className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent">
+              <select 
+                className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent"
+                value={formData.grade}
+                onChange={(e) => setFormData({...formData, grade: e.target.value})}
+              >
                 <option>الأول</option><option>الثاني</option><option>الثالث</option>
                 <option>الرابع</option><option>الخامس</option><option>السادس</option>
               </select>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text2">الفصل *</label>
-              <input className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" placeholder="مثال: A" />
+              <input 
+                className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                placeholder="مثال: A"
+                value={formData.classroom}
+                onChange={(e) => setFormData({...formData, classroom: e.target.value})}
+              />
             </div>
             <div className="col-span-2 space-y-1.5">
               <label className="text-xs font-bold text-text2">رقم الجوال</label>
-              <input className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" placeholder="+966 5xxxxxxxx" />
+              <input 
+                className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                placeholder="+966 5xxxxxxxx"
+                value={formData.phone}
+                onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              />
             </div>
           </div>
-          <button className="w-full mt-6 bg-accent text-white font-bold py-3 rounded-xl hover:bg-accent/90 transition-all flex items-center justify-center gap-2">
+          <button 
+            onClick={handleAddStudent}
+            className="w-full mt-6 bg-accent text-white font-bold py-3 rounded-xl hover:bg-accent/90 transition-all flex items-center justify-center gap-2"
+          >
             <Plus size={18} />
             إضافة طالب
           </button>
@@ -96,7 +221,7 @@ export const Students: React.FC = () => {
           <div className="bg-accent/5 border border-accent/10 rounded-xl p-4 mb-6">
             <h4 className="text-xs font-bold text-accent2 flex items-center gap-2 mb-1">
               <Info size={14} />
-              ترتيب أعمدة Excel
+              ترتيب أعمدة CSV
             </h4>
             <p className="text-[11px] text-text2">يجب أن تكون الأعمدة بالترتيب التالي في الملف لضمان الاستيراد الصحيح.</p>
           </div>
@@ -130,7 +255,7 @@ export const Students: React.FC = () => {
           
           <button className="w-full mt-6 bg-bg3 border border-border text-text2 font-bold py-3 rounded-xl hover:bg-card hover:text-text transition-all flex items-center justify-center gap-2">
             <Download size={18} />
-            تحميل قالب Excel
+            تحميل قالب CSV
           </button>
         </div>
       </div>
@@ -167,46 +292,58 @@ export const Students: React.FC = () => {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-sm">
-            <thead className="bg-bg3/50 text-text3 text-[10px] font-bold uppercase tracking-wider">
-              <tr>
-                <th className="px-6 py-3">رقم الطالب</th>
-                <th className="px-6 py-3">اسم الطالب</th>
-                <th className="px-6 py-3">الصف</th>
-                <th className="px-6 py-3">الفصل</th>
-                <th className="px-6 py-3">رقم الجوال</th>
-                <th className="px-6 py-3">اللجنة</th>
-                <th className="px-6 py-3">الحالة</th>
-                <th className="px-6 py-3">الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {filteredStudents.map((s, i) => (
-                <tr key={i} className="hover:bg-white/5 transition-colors">
-                  <td className="px-6 py-4 font-bold text-text">{s.student_no}</td>
-                  <td className="px-6 py-4 text-text2">{s.full_name}</td>
-                  <td className="px-6 py-4 text-text2">{s.grade}</td>
-                  <td className="px-6 py-4 text-text2">{s.classroom}</td>
-                  <td className="px-6 py-4 text-text3 font-mono text-xs" dir="ltr">{s.phone}</td>
-                  <td className="px-6 py-4">
-                    <span className="px-2 py-1 bg-bg3 text-text3 text-[10px] font-bold rounded-md border border-border">غير محدد</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="flex items-center gap-1.5 text-green text-xs font-bold">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green"></div>
-                      نشط
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <button className="p-1.5 bg-bg3 text-text3 rounded-lg hover:text-accent transition-colors"><Edit size={14} /></button>
-                      <button className="p-1.5 bg-bg3 text-text3 rounded-lg hover:text-red transition-colors"><Trash2 size={14} /></button>
-                    </div>
-                  </td>
+          {loading ? (
+            <div className="p-20 text-center">
+              <Loader2 className="mx-auto animate-spin text-accent mb-4" size={40} />
+              <p className="text-text3 text-sm">جاري تحميل بيانات الطلاب...</p>
+            </div>
+          ) : (
+            <table className="w-full text-right text-sm">
+              <thead className="bg-bg3/50 text-text3 text-[10px] font-bold uppercase tracking-wider">
+                <tr>
+                  <th className="px-6 py-3">رقم الطالب</th>
+                  <th className="px-6 py-3">اسم الطالب</th>
+                  <th className="px-6 py-3">الصف</th>
+                  <th className="px-6 py-3">الفصل</th>
+                  <th className="px-6 py-3">رقم الجوال</th>
+                  <th className="px-6 py-3">الحالة</th>
+                  <th className="px-6 py-3">الإجراءات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {filteredStudents.length > 0 ? filteredStudents.map((s, i) => (
+                  <tr key={i} className="hover:bg-white/5 transition-colors">
+                    <td className="px-6 py-4 font-bold text-text">{s.student_no}</td>
+                    <td className="px-6 py-4 text-text2">{s.full_name}</td>
+                    <td className="px-6 py-4 text-text2">{s.grade}</td>
+                    <td className="px-6 py-4 text-text2">{s.classroom}</td>
+                    <td className="px-6 py-4 text-text3 font-mono text-xs" dir="ltr">{s.phone}</td>
+                    <td className="px-6 py-4">
+                      <span className="flex items-center gap-1.5 text-green text-xs font-bold">
+                        <div className="w-1.5 h-1.5 rounded-full bg-green"></div>
+                        نشط
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <button className="p-1.5 bg-bg3 text-text3 rounded-lg hover:text-accent transition-colors"><Edit size={14} /></button>
+                        <button 
+                          onClick={() => s.id && handleDelete(s.id)}
+                          className="p-1.5 bg-bg3 text-text3 rounded-lg hover:text-red transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={7} className="p-10 text-center text-text3">لا يوجد طلاب مسجلين حالياً</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
