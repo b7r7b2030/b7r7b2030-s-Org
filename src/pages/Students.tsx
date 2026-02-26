@@ -40,11 +40,36 @@ export const Students: React.FC = () => {
     fetchStudents();
   }, []);
 
+  const gradeOrder: Record<string, number> = {
+    'الأول الثانوي': 1,
+    'الأول': 1,
+    'الثاني الثانوي': 2,
+    'الثاني': 2,
+    'الثالث الثانوي': 3,
+    'الثالث': 3,
+    'الرابع': 4,
+    'الخامس': 5,
+    'السادس': 6
+  };
+
   const fetchStudents = async () => {
     setLoading(true);
-    const data = await sbFetch<Student>('students', 'GET', null, '?select=*&order=full_name');
+    const data = await sbFetch<Student>('students', 'GET', null, '?select=*');
     if (data) {
-      setStudents(data);
+      // Sort by grade order, then by seat_no (numeric if possible)
+      const sorted = [...data].sort((a, b) => {
+        const orderA = gradeOrder[a.grade] || 99;
+        const orderB = gradeOrder[b.grade] || 99;
+        if (orderA !== orderB) return orderA - orderB;
+        
+        // If same grade, try sorting by seat_no
+        const seatA = parseInt(a.seat_no || '0');
+        const seatB = parseInt(b.seat_no || '0');
+        if (seatA && seatB) return seatA - seatB;
+        
+        return a.full_name.localeCompare(b.full_name, 'ar');
+      });
+      setStudents(sorted);
     }
     setLoading(false);
   };

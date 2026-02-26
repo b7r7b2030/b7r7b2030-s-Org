@@ -12,15 +12,15 @@ export interface User {
 }
 
 export interface ExamSchedule {
-  id: string;
+  id?: string;
+  exam_date: string;
+  day_name: string;
   grade: string;
-  days_count: number;
-  committees_count: number;
-  subjects: {
-    name: string;
-    start_time: string;
-    end_time: string;
-  }[];
+  period: number;
+  subject: string;
+  start_time: string;
+  end_time: string;
+  duration: string;
 }
 
 export interface Student {

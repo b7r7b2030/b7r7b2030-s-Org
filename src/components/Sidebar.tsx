@@ -16,7 +16,8 @@ import {
   GraduationCap,
   LogOut,
   Menu,
-  X
+  X,
+  Calendar
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -43,7 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'teachers', label: 'المعلمون', icon: UserSquare2, roles: [UserRole.PRINCIPAL] },
     { id: 'committees', label: 'اللجان', icon: School, roles: [UserRole.PRINCIPAL, UserRole.TEACHER] },
     { id: 'envelopes', label: 'المظاريف', icon: Package, roles: [UserRole.PRINCIPAL, UserRole.TEACHER] },
-    { id: 'attendance', label: 'التحضير', icon: CheckCircle2, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.COUNSELOR] },
+    { id: 'attendance', label: 'التحضير', icon: CheckCircle2, roles: [UserRole.TEACHER] },
+    { id: 'examschedule', label: 'الجدول', icon: Calendar, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR] },
     { id: 'qrcodes', label: 'QR', icon: QrCode, roles: [UserRole.PRINCIPAL, UserRole.TEACHER] },
     { id: 'reports', label: 'تقارير', icon: BarChart3, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR] },
     { id: 'analytics', label: 'تحليل', icon: TrendingUp, roles: [UserRole.PRINCIPAL] },

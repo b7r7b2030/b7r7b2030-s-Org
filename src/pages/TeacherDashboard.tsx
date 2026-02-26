@@ -9,69 +9,99 @@ import {
   Camera,
   School,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { QRScanner } from '../components/QRScanner';
 import { Student, Committee } from '../types';
-
-const mockStudents: Student[] = [
-  { student_no: '101', full_name: 'أحمد محمد علي', grade: 'الأول', classroom: 'A' },
-  { student_no: '102', full_name: 'خالد سعد الدوسري', grade: 'الأول', classroom: 'A' },
-  { student_no: '201', full_name: 'فيصل القحطاني', grade: 'الثاني', classroom: 'B' },
-  { student_no: '202', full_name: 'يوسف المالكي', grade: 'الثاني', classroom: 'B' },
-  { student_no: '301', full_name: 'عمر الغامدي', grade: 'الثالث', classroom: 'C' },
-  { student_no: '302', full_name: 'سلمان الزهراني', grade: 'الثالث', classroom: 'C' },
-];
+import { sbFetch } from '../services/supabase';
 
 export const TeacherDashboard: React.FC = () => {
   const [isScanning, setIsScanning] = useState(true);
-  const [envelopeData, setEnvelopeData] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [committee, setCommittee] = useState<Committee | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
 
-  const handleScan = (data: string) => {
-    setEnvelopeData(data);
+  const gradeOrder: Record<string, number> = {
+    'الأول الثانوي': 1,
+    'الأول': 1,
+    'الثاني الثانوي': 2,
+    'الثاني': 2,
+    'الثالث الثانوي': 3,
+    'الثالث': 3
+  };
+
+  const handleScan = async (data: string) => {
+    setLoading(true);
     setIsScanning(false);
     
-    // Simulate fetching committee data for scanned envelope
-    setCommittee({
-      id: '1',
-      name: '1A',
-      subject: 'الرياضيات',
-      teacher_name: 'أحمد السيد',
-      exam_date: '2024-05-26',
-      start_time: '08:00',
-      end_time: '10:00'
-    });
-
-    // Sort students by grade: 1st, 2nd, 3rd
-    const gradeOrder = ['الأول', 'الثاني', 'الثالث'];
-    const sorted = [...mockStudents].sort((a, b) => {
-      return gradeOrder.indexOf(a.grade) - gradeOrder.indexOf(b.grade);
-    });
-    setStudents(sorted);
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.type === 'committee') {
+        // Fetch committee details
+        const cData = await sbFetch<Committee>('committees', 'GET', null, `?id=eq.${parsed.id}`);
+        if (cData && cData.length > 0) {
+          setCommittee(cData[0]);
+          
+          // Fetch students for this committee
+          const sData = await sbFetch<Student>('students', 'GET', null, `?committee_name=eq.${cData[0].name}`);
+          if (sData) {
+            // Sort by grade order
+            const sorted = [...sData].sort((a, b) => {
+              const orderA = gradeOrder[a.grade] || 99;
+              const orderB = gradeOrder[b.grade] || 99;
+              if (orderA !== orderB) return orderA - orderB;
+              return parseInt(a.seat_no || '0') - parseInt(b.seat_no || '0');
+            });
+            setStudents(sorted);
+          }
+        } else {
+          alert('لجنة غير موجودة في قاعدة البيانات');
+          setIsScanning(true);
+        }
+      } else {
+        alert('رمز QR غير صالح للجنة');
+        setIsScanning(true);
+      }
+    } catch (error) {
+      console.error("Scan error:", error);
+      alert('خطأ في قراءة رمز QR');
+      setIsScanning(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (isScanning) {
     return (
       <QRScanner 
-        title="مسح رمز المظروف" 
+        title="مسح رمز اللجنة" 
         onScan={handleScan} 
         onClose={() => setIsScanning(false)} 
       />
     );
   }
 
-  if (!envelopeData) {
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <RefreshCw size={48} className="text-accent animate-spin" />
+        <p className="text-text3 font-bold">جاري تحميل بيانات اللجنة والطلاب...</p>
+      </div>
+    );
+  }
+
+  if (!committee) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
         <div className="w-24 h-24 bg-accent/10 text-accent rounded-full flex items-center justify-center">
-          <Package size={48} />
+          <School size={48} />
         </div>
         <div className="text-center space-y-2">
-          <h2 className="text-2xl font-display font-bold">بانتظار مسح المظروف</h2>
-          <p className="text-text3">يرجى مسح رمز QR الموجود على المظروف لبدء الجلسة</p>
+          <h2 className="text-2xl font-display font-bold">بانتظار مسح رمز اللجنة</h2>
+          <p className="text-text3">يرجى مسح رمز QR الموجود على باب اللجنة لبدء التحضير</p>
         </div>
         <button 
           onClick={() => setIsScanning(true)}
@@ -144,9 +174,9 @@ export const TeacherDashboard: React.FC = () => {
                   <td className="px-6 py-4">
                     <span className={cn(
                       "px-2 py-1 text-[10px] font-bold rounded-md border",
-                      s.grade === 'الأول' && "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                      s.grade === 'الثاني' && "bg-purple-500/10 text-purple-400 border-purple-500/20",
-                      s.grade === 'الثالث' && "bg-gold/10 text-gold border-gold/20"
+                      (s.grade.includes('الأول')) && "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                      (s.grade.includes('الثاني')) && "bg-purple-500/10 text-purple-400 border-purple-500/20",
+                      (s.grade.includes('الثالث')) && "bg-gold/10 text-gold border-gold/20"
                     )}>
                       {s.grade}
                     </span>

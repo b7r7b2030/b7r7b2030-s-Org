@@ -85,6 +85,20 @@ CREATE TABLE IF NOT EXISTS attendance (
     UNIQUE (committee_id, student_id)
 );
 
+CREATE TABLE IF NOT EXISTS exam_schedules (
+    id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    exam_date   DATE        NOT NULL,
+    day_name    TEXT        NOT NULL,
+    grade       TEXT        NOT NULL,
+    period      INTEGER     NOT NULL,
+    subject     TEXT        NOT NULL,
+    start_time  TIME        NOT NULL,
+    end_time    TIME        NOT NULL,
+    duration    TEXT,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
 -- 2. التقارير الذكية (Views)
 CREATE OR REPLACE VIEW v_envelope_tracking AS
 SELECT
@@ -199,34 +213,16 @@ export const Setup: React.FC = () => {
           <Calendar size={18} className="text-purple" />
           جدول الاختبارات والمراحل
         </h3>
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-bg3 border border-border rounded-2xl space-y-3">
-              <h4 className="text-xs font-bold text-text">المرحلة الأولى</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between text-[10px] text-text3"><span>عدد الأيام:</span> <input className="w-12 bg-bg border border-border rounded px-1 text-center" defaultValue="5" /></div>
-                <div className="flex justify-between text-[10px] text-text3"><span>عدد اللجان:</span> <input className="w-12 bg-bg border border-border rounded px-1 text-center" defaultValue="12" /></div>
-              </div>
-            </div>
-            <div className="p-4 bg-bg3 border border-border rounded-2xl space-y-3">
-              <h4 className="text-xs font-bold text-text">المرحلة الثانية</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between text-[10px] text-text3"><span>عدد الأيام:</span> <input className="w-12 bg-bg border border-border rounded px-1 text-center" defaultValue="5" /></div>
-                <div className="flex justify-between text-[10px] text-text3"><span>عدد اللجان:</span> <input className="w-12 bg-bg border border-border rounded px-1 text-center" defaultValue="10" /></div>
-              </div>
-            </div>
-            <div className="p-4 bg-bg3 border border-border rounded-2xl space-y-3">
-              <h4 className="text-xs font-bold text-text">المرحلة الثالثة</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between text-[10px] text-text3"><span>عدد الأيام:</span> <input className="w-12 bg-bg border border-border rounded px-1 text-center" defaultValue="5" /></div>
-                <div className="flex justify-between text-[10px] text-text3"><span>عدد اللجان:</span> <input className="w-12 bg-bg border border-border rounded px-1 text-center" defaultValue="8" /></div>
-              </div>
-            </div>
-          </div>
-          <button className="w-full py-3 bg-purple text-white font-bold rounded-xl hover:bg-purple/90 transition-all">
-            حفظ إعدادات الجدولة
-          </button>
-        </div>
+        <p className="text-xs text-text3 mb-6 leading-relaxed">
+          يمكنك من خلال معالج الجدولة إعداد أيام الاختبارات، توزيع المواد على الفترات، وتحديد المواعيد لكل مرحلة دراسية على حدة.
+        </p>
+        <button 
+          onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'examschedule' }))}
+          className="w-full py-4 bg-purple text-white font-bold rounded-xl hover:bg-purple/90 transition-all flex items-center justify-center gap-3 shadow-lg shadow-purple/20"
+        >
+          <Calendar size={20} />
+          فتح معالج جدولة الاختبارات
+        </button>
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-6 relative overflow-hidden">

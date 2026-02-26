@@ -15,13 +15,15 @@ import { Alerts } from './pages/Alerts';
 import { Reports } from './pages/Reports';
 import { Analytics } from './pages/Analytics';
 import { Setup } from './pages/Setup';
+import { ExamSchedulePage } from './pages/ExamSchedule';
 import { 
   Users, 
   UserSquare2, 
   School, 
   Package,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Calendar as CalendarIcon
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { UserRole } from './types';
@@ -31,6 +33,15 @@ export default function App() {
   const [activePage, setActivePage] = useState('dashboard');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [alertCount, setAlertCount] = useState(4);
+
+  // Listen for custom navigation events
+  useEffect(() => {
+    const handleNavigate = (e: any) => {
+      if (e.detail) setActivePage(e.detail);
+    };
+    window.addEventListener('navigate', handleNavigate);
+    return () => window.removeEventListener('navigate', handleNavigate);
+  }, []);
 
   // If no role is selected, show role selector
   if (!userRole) {
@@ -50,6 +61,7 @@ export default function App() {
     reports: { title: 'التقارير الذكية', subtitle: 'تقارير شاملة وقابلة للتصدير لجميع عمليات الاختبارات' },
     analytics: { title: 'التحليلات المتقدمة', subtitle: 'رؤى ذكية لتحسين العملية التعليمية' },
     setup: { title: 'إعداد النظام', subtitle: 'إعداد قاعدة البيانات السحابية وإنشاء الجداول' },
+    examschedule: { title: 'جدول الاختبارات', subtitle: 'إعداد وتوزيع المواد على الأيام والفترات' },
   };
 
   const renderPage = () => {
@@ -64,12 +76,14 @@ export default function App() {
       case 'teachers': return <Teachers />;
       case 'committees': return <Committees />;
       case 'envelopes': return <Envelopes />;
-      case 'attendance': return <Attendance />;
+      case 'attendance': 
+        return userRole === UserRole.TEACHER ? <TeacherDashboard /> : <Attendance />;
       case 'qrcodes': return <QRCodes />;
       case 'alerts': return <Alerts />;
       case 'reports': return <Reports />;
       case 'analytics': return <Analytics />;
       case 'setup': return <Setup />;
+      case 'examschedule': return <ExamSchedulePage />;
       default: return <Dashboard />;
     }
   };
