@@ -33,7 +33,12 @@ export const ExamSchedulePage: React.FC = () => {
     setLoading(true);
     const data = await sbFetch<ExamSchedule>('exam_schedules', 'GET', null, '?order=exam_date,period');
     if (data) {
-      setSchedules(data);
+      // Ensure date is in YYYY-MM-DD format for the date input
+      const sanitized = data.map(s => ({
+        ...s,
+        exam_date: s.exam_date.split('T')[0]
+      }));
+      setSchedules(sanitized);
     }
     setLoading(false);
   };
@@ -79,48 +84,64 @@ export const ExamSchedulePage: React.FC = () => {
   };
 
   const handleUpdate = (index: number, field: keyof ExamSchedule, value: any) => {
+    if (!schedules[index]) return;
+    
     const updated = [...schedules];
-    updated[index] = { ...updated[index], [field]: value };
+    const oldDate = schedules[index].exam_date;
     
     if (field === 'exam_date') {
-      const date = new Date(value);
-      const dayName = new Intl.DateTimeFormat('ar-SA', { weekday: 'long' }).format(date);
-      // Update all rows with the old date to the new date and day name
-      const oldDate = schedules[index].exam_date;
+      if (!value) return;
+      // Use T00:00:00 to ensure the date is parsed correctly in local time
+      const date = new Date(value + 'T00:00:00');
+      const dayName = isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('ar-SA', { weekday: 'long' }).format(date);
+      
+      // Update all rows that had the old date
       updated.forEach((s, i) => {
         if (s.exam_date === oldDate) {
-          updated[i].exam_date = value;
-          updated[i].day_name = dayName;
+          updated[i] = { ...updated[i], exam_date: value, day_name: dayName };
         }
       });
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
     }
     
     setSchedules(updated);
   };
 
   const handleRemoveDate = (date: string) => {
+    if (!date) return;
     setSchedules(schedules.filter(s => s.exam_date !== date));
   };
 
   const handleSave = async () => {
     setSaving(true);
-    // Delete all existing and insert new (simple sync for now)
-    await sbFetch('exam_schedules', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
-    
-    const toSave = schedules.map(({ id, ...rest }) => rest);
-    const res = await sbFetch('exam_schedules', 'POST', toSave);
-    
-    if (res) {
-      alert('تم حفظ الجدول بنجاح');
-      fetchSchedules();
-    } else {
-      alert('حدث خطأ أثناء الحفظ');
+    try {
+      // Delete all existing and insert new (simple sync for now)
+      await sbFetch('exam_schedules', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+      
+      if (schedules.length > 0) {
+        const toSave = schedules.map(({ id, ...rest }) => rest);
+        const res = await sbFetch('exam_schedules', 'POST', toSave);
+        
+        if (res) {
+          alert('تم حفظ الجدول بنجاح');
+          fetchSchedules();
+        } else {
+          alert('حدث خطأ أثناء الحفظ');
+        }
+      } else {
+        alert('تم مسح الجدول بنجاح');
+      }
+    } catch (error) {
+      console.error("Save error:", error);
+      alert('حدث خطأ غير متوقع أثناء الحفظ');
     }
     setSaving(false);
   };
 
   const groupedByDate = schedules.reduce((acc, curr) => {
-    if (!acc[curr.exam_date]) acc[curr.exam_date] = { dayName: curr.day_name, grades: {} };
+    if (!curr || !curr.exam_date) return acc;
+    if (!acc[curr.exam_date]) acc[curr.exam_date] = { dayName: curr.day_name || '', grades: {} };
     if (!acc[curr.exam_date].grades[curr.grade]) acc[curr.exam_date].grades[curr.grade] = [];
     acc[curr.exam_date].grades[curr.grade].push(curr);
     return acc;
@@ -307,12 +328,14 @@ export const ExamSchedulePage: React.FC = () => {
                   <td className="px-4 py-3">
                     {idx === 0 || schedules[idx-1].exam_date !== row.exam_date ? (
                       <div className="space-y-1">
-                        <div className="relative">
+                        <div className="relative group">
                           <input 
                             type="date" 
                             value={row.exam_date}
                             onChange={(e) => handleUpdate(idx, 'exam_date', e.target.value)}
-                            className="bg-bg border border-border rounded-lg px-2 py-1.5 text-xs w-full outline-none focus:border-purple cursor-pointer"
+                            onClick={(e) => (e.target as any).showPicker?.()}
+                            className="bg-bg border border-border rounded-lg px-2 py-2 text-xs w-full outline-none focus:border-purple cursor-pointer appearance-none"
+                            style={{ colorScheme: 'dark' }}
                           />
                         </div>
                         <div className="text-[10px] font-bold text-purple px-2">{row.day_name}</div>
