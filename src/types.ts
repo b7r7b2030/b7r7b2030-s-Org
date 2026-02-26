@@ -25,10 +25,13 @@ export interface ExamSchedule {
 
 export interface Student {
   id?: string;
-  student_no: string;
-  full_name: string;
-  grade: string;
-  classroom: string;
+  student_no: string; // السجل المدني
+  full_name: string; // اسم الطالب
+  grade: string; // الصف
+  grade_code?: string; // رمز الصف
+  classroom: string; // الفصل
+  committee_name?: string; // اللجنة
+  seat_no?: string; // رقم الجلوس
   phone?: string;
   created_at?: string;
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { 
   Users, 
   Upload, 
@@ -11,7 +12,8 @@ import {
   Filter,
   MoreVertical,
   Info,
-  Loader2
+  Loader2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Student } from '../types';
@@ -75,34 +77,54 @@ export const Students: React.FC = () => {
 
     setImporting(true);
     const reader = new FileReader();
+    
     reader.onload = async (event) => {
-      const content = event.target?.result as string;
-      const lines = content.split('\n').filter(l => l.trim());
-      const headers = lines[0].split(',').map(h => h.trim());
-      
-      const studentsToImport = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-        return {
-          student_no: values[0],
-          full_name: values[1],
-          grade: values[2],
-          classroom: values[3],
-          phone: values[4]
-        };
-      }).filter(s => s.student_no && s.full_name);
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert sheet to JSON (array of arrays)
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        
+        // Skip header row and map data
+        const studentsToImport = jsonData.slice(1).map(row => ({
+          student_no: String(row[1] || '').trim(), // السجل المدني (Column B)
+          full_name: String(row[2] || '').trim(), // اسم الطالب (Column C)
+          grade: String(row[3] || '').trim(), // الصف (Column D)
+          grade_code: String(row[4] || '').trim(), // رمز الصف (Column E)
+          classroom: String(row[5] || '').trim(), // الفصل (Column F)
+          committee_name: String(row[6] || '').trim(), // اللجنة (Column G)
+          seat_no: String(row[7] || '').trim(), // رقم الجلوس (Column H)
+        })).filter(s => s.student_no && s.full_name);
 
-      let successCount = 0;
-      for (const student of studentsToImport) {
-        const res = await sbFetch('students', 'POST', student);
-        if (res) successCount++;
+        if (studentsToImport.length === 0) {
+          alert('الملف فارغ أو لا يحتوي على بيانات صحيحة');
+          setImporting(false);
+          return;
+        }
+
+        let successCount = 0;
+        // Batch insert would be better, but sbFetch currently does single POST
+        // Let's do them in chunks or one by one for now as per previous logic
+        for (const student of studentsToImport) {
+          const res = await sbFetch('students', 'POST', student);
+          if (res) successCount++;
+        }
+
+        alert(`تم استيراد ${successCount} طالب بنجاح من أصل ${studentsToImport.length}`);
+      } catch (error) {
+        console.error("Excel parsing error:", error);
+        alert('حدث خطأ أثناء قراءة ملف Excel. تأكد من الصيغة الصحيحة.');
+      } finally {
+        setImporting(false);
+        fetchStudents();
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
-
-      alert(`تم استيراد ${successCount} طالب بنجاح`);
-      setImporting(false);
-      fetchStudents();
-      if (fileInputRef.current) fileInputRef.current.value = '';
     };
-    reader.readAsText(file);
+
+    reader.readAsArrayBuffer(file);
   };
 
   const filteredStudents = students.filter(s => {
@@ -117,15 +139,15 @@ export const Students: React.FC = () => {
         {/* Import Section */}
         <div className="bg-card border border-border rounded-2xl p-6">
           <h3 className="font-bold text-sm mb-4 flex items-center gap-2">
-            <Upload size={18} className="text-accent" />
-            استيراد بيانات الطلاب
+            <FileSpreadsheet size={18} className="text-accent" />
+            استيراد بيانات الطلاب (Excel)
           </h3>
           
           <input 
             type="file" 
             ref={fileInputRef} 
             onChange={handleFileUpload} 
-            accept=".csv" 
+            accept=".xlsx, .xls, .csv" 
             className="hidden" 
           />
 
@@ -140,13 +162,13 @@ export const Students: React.FC = () => {
               {importing ? (
                 <Loader2 size={32} className="text-accent animate-spin" />
               ) : (
-                <Upload size={32} className="text-text3 group-hover:text-accent" />
+                <FileSpreadsheet size={32} className="text-text3 group-hover:text-accent" />
               )}
             </div>
             <h4 className="font-bold text-text mb-2">
-              {importing ? 'جاري الاستيراد...' : 'رفع ملف CSV'}
+              {importing ? 'جاري الاستيراد...' : 'رفع ملف Excel (XLSX)'}
             </h4>
-            <p className="text-xs text-text3 max-w-xs mx-auto">الحقول المطلوبة: رقم الطالب، اسم الطالب، الصف، الفصل، رقم الجوال</p>
+            <p className="text-xs text-text3 max-w-xs mx-auto">يدعم ملفات .xlsx و .xls و .csv</p>
           </div>
           
           <div className="relative my-8">
@@ -221,7 +243,7 @@ export const Students: React.FC = () => {
           <div className="bg-accent/5 border border-accent/10 rounded-xl p-4 mb-6">
             <h4 className="text-xs font-bold text-accent2 flex items-center gap-2 mb-1">
               <Info size={14} />
-              ترتيب أعمدة CSV
+              ترتيب أعمدة Excel
             </h4>
             <p className="text-[11px] text-text2">يجب أن تكون الأعمدة بالترتيب التالي في الملف لضمان الاستيراد الصحيح.</p>
           </div>
@@ -237,11 +259,14 @@ export const Students: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-border/50">
                 {[
-                  { col: 'A', name: 'رقم الطالب', ex: '20241001' },
-                  { col: 'B', name: 'اسم الطالب', ex: 'أحمد محمد علي' },
-                  { col: 'C', name: 'الصف', ex: 'الرابع' },
-                  { col: 'D', name: 'الفصل', ex: 'A' },
-                  { col: 'E', name: 'رقم الجوال', ex: '0512345678' },
+                  { col: 'A', name: 'م', ex: '1' },
+                  { col: 'B', name: 'السجل المدني', ex: '1023456789' },
+                  { col: 'C', name: 'اسم الطالب', ex: 'أحمد محمد علي' },
+                  { col: 'D', name: 'الصف', ex: 'الأول الثانوي' },
+                  { col: 'E', name: 'رمز الصف', ex: '101' },
+                  { col: 'F', name: 'الفصل', ex: '1' },
+                  { col: 'G', name: 'اللجنة', ex: 'لجنة 1' },
+                  { col: 'H', name: 'رقم الجلوس', ex: '5001' },
                 ].map((row, i) => (
                   <tr key={i}>
                     <td className="px-4 py-2 font-bold text-accent">{row.col}</td>
@@ -255,7 +280,7 @@ export const Students: React.FC = () => {
           
           <button className="w-full mt-6 bg-bg3 border border-border text-text2 font-bold py-3 rounded-xl hover:bg-card hover:text-text transition-all flex items-center justify-center gap-2">
             <Download size={18} />
-            تحميل قالب CSV
+            تحميل قالب Excel
           </button>
         </div>
       </div>
@@ -301,12 +326,12 @@ export const Students: React.FC = () => {
             <table className="w-full text-right text-sm">
               <thead className="bg-bg3/50 text-text3 text-[10px] font-bold uppercase tracking-wider">
                 <tr>
-                  <th className="px-6 py-3">رقم الطالب</th>
+                  <th className="px-6 py-3">السجل المدني</th>
                   <th className="px-6 py-3">اسم الطالب</th>
                   <th className="px-6 py-3">الصف</th>
                   <th className="px-6 py-3">الفصل</th>
-                  <th className="px-6 py-3">رقم الجوال</th>
-                  <th className="px-6 py-3">الحالة</th>
+                  <th className="px-6 py-3">اللجنة</th>
+                  <th className="px-6 py-3">رقم الجلوس</th>
                   <th className="px-6 py-3">الإجراءات</th>
                 </tr>
               </thead>
@@ -317,13 +342,8 @@ export const Students: React.FC = () => {
                     <td className="px-6 py-4 text-text2">{s.full_name}</td>
                     <td className="px-6 py-4 text-text2">{s.grade}</td>
                     <td className="px-6 py-4 text-text2">{s.classroom}</td>
-                    <td className="px-6 py-4 text-text3 font-mono text-xs" dir="ltr">{s.phone}</td>
-                    <td className="px-6 py-4">
-                      <span className="flex items-center gap-1.5 text-green text-xs font-bold">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green"></div>
-                        نشط
-                      </span>
-                    </td>
+                    <td className="px-6 py-4 text-text2">{s.committee_name || '—'}</td>
+                    <td className="px-6 py-4 text-accent font-bold">{s.seat_no || '—'}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <button className="p-1.5 bg-bg3 text-text3 rounded-lg hover:text-accent transition-colors"><Edit size={14} /></button>

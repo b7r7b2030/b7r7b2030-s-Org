@@ -17,37 +17,105 @@ import { sbFetch } from '../services/supabase';
 
 const sqlScript = `-- ═══════════════════════════════════════════════════════════
 -- نظام إدارة الاختبارات الذكي — سكريبت قاعدة البيانات الكامل
+-- يتوافق مع استيراد Excel (السجل المدني، رمز الصف، اللجنة، رقم الجلوس)
 -- ═══════════════════════════════════════════════════════════
 
+-- 1. الجداول الأساسية
 CREATE TABLE IF NOT EXISTS students (
-  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  student_no  TEXT UNIQUE NOT NULL,
-  full_name   TEXT NOT NULL,
-  grade       TEXT NOT NULL,
-  classroom   TEXT NOT NULL,
-  phone       TEXT,
-  created_at  TIMESTAMPTZ DEFAULT now()
+    id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    student_no      TEXT        UNIQUE NOT NULL,
+    full_name       TEXT        NOT NULL,
+    grade           TEXT        NOT NULL,
+    grade_code      TEXT,
+    classroom       TEXT        NOT NULL,
+    committee_name  TEXT,
+    seat_no         TEXT,
+    phone           TEXT,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS teachers (
-  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  teacher_no  TEXT UNIQUE NOT NULL,
-  full_name   TEXT NOT NULL,
-  phone       TEXT NOT NULL,
-  qr_code     TEXT,
-  created_at  TIMESTAMPTZ DEFAULT now()
+    id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    teacher_no  TEXT        UNIQUE NOT NULL,
+    full_name   TEXT        NOT NULL,
+    phone       TEXT        NOT NULL,
+    qr_code     TEXT,
+    is_active   BOOLEAN     DEFAULT true,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS committees (
-  id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name         TEXT NOT NULL,
-  subject      TEXT NOT NULL,
-  teacher_id   UUID REFERENCES teachers(id),
-  exam_date    DATE NOT NULL,
-  start_time   TIME NOT NULL,
-  end_time     TIME NOT NULL,
-  created_at   TIMESTAMPTZ DEFAULT now()
-);`;
+    id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    name        TEXT        NOT NULL,
+    subject     TEXT        NOT NULL,
+    teacher_id  UUID        REFERENCES teachers(id) ON DELETE SET NULL,
+    exam_date   DATE        NOT NULL,
+    start_time  TIME        NOT NULL,
+    end_time    TIME        NOT NULL,
+    room_no     TEXT,
+    status      TEXT        DEFAULT 'scheduled' CHECK (status IN ('scheduled','active','completed','cancelled')),
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS envelopes (
+    id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    envelope_no     TEXT        UNIQUE NOT NULL,
+    committee_id    UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
+    status          TEXT        DEFAULT 'pending' CHECK (status IN ('pending','received','in_progress','delivered')),
+    received_by     UUID        REFERENCES teachers(id) ON DELETE SET NULL,
+    received_at     TIMESTAMPTZ,
+    exam_ended_at   TIMESTAMPTZ,
+    delivered_at    TIMESTAMPTZ,
+    paper_count     INTEGER,
+    notes           TEXT,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS attendance (
+    id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    committee_id  UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
+    student_id    UUID        NOT NULL REFERENCES students(id)   ON DELETE CASCADE,
+    teacher_id    UUID        REFERENCES teachers(id) ON DELETE SET NULL,
+    status        TEXT        NOT NULL CHECK (status IN ('present','absent','late')),
+    recorded_at   TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (committee_id, student_id)
+);
+
+-- 2. التقارير الذكية (Views)
+CREATE OR REPLACE VIEW v_envelope_tracking AS
+SELECT
+    e.envelope_no,
+    e.status AS envelope_status,
+    c.name AS committee_name,
+    c.subject,
+    c.exam_date,
+    t.full_name AS teacher_name,
+    e.received_at,
+    e.exam_ended_at,
+    e.delivered_at,
+    e.paper_count,
+    e.notes
+FROM envelopes e
+JOIN committees c ON e.committee_id = c.id
+LEFT JOIN teachers t ON e.received_by = t.id;
+
+-- 3. تفعيل RLS
+ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE teachers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE committees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE envelopes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow All" ON students FOR ALL USING (true);
+CREATE POLICY "Allow All" ON teachers FOR ALL USING (true);
+CREATE POLICY "Allow All" ON committees FOR ALL USING (true);
+CREATE POLICY "Allow All" ON envelopes FOR ALL USING (true);
+CREATE POLICY "Allow All" ON attendance FOR ALL USING (true);
+`;
 
 export const Setup: React.FC = () => {
   const [copied, setCopied] = useState(false);
