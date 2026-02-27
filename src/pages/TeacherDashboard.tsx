@@ -23,12 +23,16 @@ export const TeacherDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [committee, setCommittee] = useState<Committee | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
+  const [attendance, setAttendance] = useState<Record<string, 'present' | 'absent' | 'late'>>({});
 
   const gradeOrder: Record<string, number> = {
+    'أول ثانوي': 1,
     'الأول الثانوي': 1,
     'الأول': 1,
+    'ثاني ثانوي': 2,
     'الثاني الثانوي': 2,
     'الثاني': 2,
+    'ثالث ثانوي': 3,
     'الثالث الثانوي': 3,
     'الثالث': 3
   };
@@ -39,7 +43,7 @@ export const TeacherDashboard: React.FC = () => {
     
     try {
       const parsed = JSON.parse(data);
-      if (parsed.type === 'committee') {
+      if (parsed.type === 'committee' || parsed.type === 'envelope') {
         // Fetch committee details
         const cData = await sbFetch<Committee>('committees', 'GET', null, `?id=eq.${parsed.id}`);
         if (cData && cData.length > 0) {
@@ -48,7 +52,6 @@ export const TeacherDashboard: React.FC = () => {
           // Fetch students for this committee
           const sData = await sbFetch<Student>('students', 'GET', null, `?committee_name=eq.${cData[0].name}`);
           if (sData) {
-            // Sort by grade order
             const sorted = [...sData].sort((a, b) => {
               const orderA = gradeOrder[a.grade] || 99;
               const orderB = gradeOrder[b.grade] || 99;
@@ -56,23 +59,48 @@ export const TeacherDashboard: React.FC = () => {
               return parseInt(a.seat_no || '0') - parseInt(b.seat_no || '0');
             });
             setStudents(sorted);
+            
+            // Fetch existing attendance
+            const aData = await sbFetch<any>('attendance', 'GET', null, `?committee_id=eq.${cData[0].id}`);
+            if (aData) {
+              const attMap: any = {};
+              aData.forEach((a: any) => attMap[a.student_id] = a.status);
+              setAttendance(attMap);
+            }
           }
         } else {
           alert('لجنة غير موجودة في قاعدة البيانات');
           setIsScanning(true);
         }
       } else {
-        alert('رمز QR غير صالح للجنة');
+        alert('رمز QR غير صالح');
         setIsScanning(true);
       }
     } catch (error) {
       console.error("Scan error:", error);
-      alert('خطأ في قراءة رمز QR');
+      alert('خطأ في قراءة رمز QR. تأكد من جودة الصورة.');
       setIsScanning(true);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleAttendance = async (studentId: string, status: 'present' | 'absent' | 'late') => {
+    if (!committee) return;
+    
+    const res = await sbFetch('attendance', 'POST', {
+      student_id: studentId,
+      committee_id: committee.id,
+      status: status,
+      recorded_at: new Date().toISOString()
+    });
+
+    if (res) {
+      setAttendance(prev => ({ ...prev, [studentId]: status }));
+    }
+  };
+
+  const presentCount = Object.values(attendance).filter(v => v === 'present').length;
 
   if (isScanning) {
     return (
@@ -137,8 +165,13 @@ export const TeacherDashboard: React.FC = () => {
             </div>
             <div className="w-px h-8 bg-white/20"></div>
             <div className="text-center">
-              <div className="text-2xl font-black text-green-400">0</div>
+              <div className="text-2xl font-black text-green-400">{presentCount}</div>
               <div className="text-[10px] uppercase font-bold opacity-60">حاضر</div>
+            </div>
+            <div className="w-px h-8 bg-white/20"></div>
+            <div className="text-center">
+              <div className="text-2xl font-black text-red-400">{students.length - presentCount}</div>
+              <div className="text-[10px] uppercase font-bold opacity-60">غائب</div>
             </div>
           </div>
         </div>
@@ -185,14 +218,33 @@ export const TeacherDashboard: React.FC = () => {
                   <td className="px-6 py-4 text-text2">{s.full_name}</td>
                   <td className="px-6 py-4 text-text3 text-xs">{s.classroom}</td>
                   <td className="px-6 py-4">
-                    <span className="text-text3 text-[10px] font-bold">بانتظار التحضير</span>
+                    <span className={cn(
+                      "text-[10px] font-bold px-2 py-1 rounded-full",
+                      attendance[s.id!] === 'present' ? "bg-green/10 text-green" : 
+                      attendance[s.id!] === 'absent' ? "bg-red/10 text-red" : "text-text3"
+                    )}>
+                      {attendance[s.id!] === 'present' ? 'حاضر' : 
+                       attendance[s.id!] === 'absent' ? 'غائب' : 'بانتظار التحضير'}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
-                      <button className="p-2 bg-green/10 text-green rounded-xl hover:bg-green hover:text-white transition-all">
+                      <button 
+                        onClick={() => s.id && handleAttendance(s.id, 'present')}
+                        className={cn(
+                          "p-2 rounded-xl transition-all",
+                          attendance[s.id!] === 'present' ? "bg-green text-white" : "bg-green/10 text-green hover:bg-green hover:text-white"
+                        )}
+                      >
                         <CheckCircle2 size={16} />
                       </button>
-                      <button className="p-2 bg-red/10 text-red rounded-xl hover:bg-red hover:text-white transition-all">
+                      <button 
+                        onClick={() => s.id && handleAttendance(s.id, 'absent')}
+                        className={cn(
+                          "p-2 rounded-xl transition-all",
+                          attendance[s.id!] === 'absent' ? "bg-red text-white" : "bg-red/10 text-red hover:bg-red hover:text-white"
+                        )}
+                      >
                         <XCircle size={16} />
                       </button>
                     </div>

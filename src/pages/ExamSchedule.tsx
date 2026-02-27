@@ -331,7 +331,7 @@ export const ExamSchedulePage: React.FC = () => {
                         <div className="relative group">
                           <input 
                             type="date" 
-                            value={row.exam_date}
+                            value={row.exam_date || ''}
                             onChange={(e) => handleUpdate(idx, 'exam_date', e.target.value)}
                             onClick={(e) => (e.target as any).showPicker?.()}
                             className="bg-bg border border-border rounded-lg px-2 py-2 text-xs w-full outline-none focus:border-purple cursor-pointer appearance-none"
@@ -367,7 +367,7 @@ export const ExamSchedulePage: React.FC = () => {
                         {row.period}
                       </span>
                       <select 
-                        value={row.period}
+                        value={row.period || 1}
                         onChange={(e) => handleUpdate(idx, 'period', parseInt(e.target.value))}
                         className="bg-bg border border-border rounded-lg px-2 py-1 text-xs outline-none focus:border-purple"
                       >
@@ -381,7 +381,7 @@ export const ExamSchedulePage: React.FC = () => {
                     <input 
                       type="text" 
                       placeholder="اسم المادة..."
-                      value={row.subject}
+                      value={row.subject || ''}
                       onChange={(e) => handleUpdate(idx, 'subject', e.target.value)}
                       className="bg-bg border border-border rounded-lg px-3 py-1.5 text-xs w-full outline-none focus:border-purple font-bold"
                     />
@@ -389,7 +389,7 @@ export const ExamSchedulePage: React.FC = () => {
                   <td className="px-4 py-3">
                     <input 
                       type="time" 
-                      value={row.start_time}
+                      value={row.start_time || ''}
                       onChange={(e) => handleUpdate(idx, 'start_time', e.target.value)}
                       className="bg-bg border border-border rounded-lg px-2 py-1 text-xs w-full outline-none focus:border-purple"
                     />
@@ -397,7 +397,7 @@ export const ExamSchedulePage: React.FC = () => {
                   <td className="px-4 py-3">
                     <input 
                       type="time" 
-                      value={row.end_time}
+                      value={row.end_time || ''}
                       onChange={(e) => handleUpdate(idx, 'end_time', e.target.value)}
                       className="bg-bg border border-border rounded-lg px-2 py-1 text-xs w-full outline-none focus:border-purple"
                     />
@@ -406,7 +406,7 @@ export const ExamSchedulePage: React.FC = () => {
                     <input 
                       type="text" 
                       placeholder="ساعتان..."
-                      value={row.duration}
+                      value={row.duration || ''}
                       onChange={(e) => handleUpdate(idx, 'duration', e.target.value)}
                       className="bg-bg border border-border rounded-lg px-2 py-1 text-xs w-full outline-none focus:border-purple"
                     />

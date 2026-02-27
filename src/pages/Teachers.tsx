@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   UserSquare2, 
   Upload, 
@@ -8,24 +8,71 @@ import {
   Edit, 
   QrCode,
   Smartphone,
-  Info
+  Info,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { cn } from '../lib/utils';
 import { Teacher } from '../types';
-
-const initialTeachers: Teacher[] = [
-  { teacher_no: 'T001', full_name: 'أحمد محمد السيد', phone: '0501234567' },
-  { teacher_no: 'T002', full_name: 'خالد سعد الأحمدي', phone: '0502345678' },
-  { teacher_no: 'T003', full_name: 'محمد علي العتيبي', phone: '0503456789' },
-  { teacher_no: 'T004', full_name: 'سعد عمر الغامدي', phone: '0504567890' },
-  { teacher_no: 'T005', full_name: 'عمر ناصر الشهري', phone: '0505678901' },
-];
+import { sbFetch } from '../services/supabase';
 
 export const Teachers: React.FC = () => {
-  const [teachers, setTeachers] = useState<Teacher[]>(initialTeachers);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
+  const [formData, setFormData] = useState({
+    teacher_no: '',
+    full_name: '',
+    phone: ''
+  });
+
+  useEffect(() => {
+    fetchTeachers();
+  }, []);
+
+  const fetchTeachers = async () => {
+    setLoading(true);
+    const data = await sbFetch<Teacher>('teachers', 'GET', null, '?select=*');
+    if (data) {
+      setTeachers(data);
+    }
+    setLoading(false);
+  };
+
+  const handleAddTeacher = async () => {
+    if (!formData.teacher_no || !formData.full_name || !formData.phone) {
+      alert('يرجى تعبئة جميع الحقول الإلزامية');
+      return;
+    }
+
+    const res = await sbFetch<Teacher>('teachers', 'POST', formData);
+    if (res) {
+      alert('تم إضافة المعلم بنجاح');
+      setFormData({ teacher_no: '', full_name: '', phone: '' });
+      fetchTeachers();
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('هل أنت متأكد من حذف هذا المعلم؟')) return;
+    const res = await sbFetch('teachers', 'DELETE', null, `?id=eq.${id}`);
+    if (res) {
+      fetchTeachers();
+      if (selectedTeacher?.id === id) setSelectedTeacher(null);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm('⚠️ تحذير: سيتم مسح جميع المعلمين من قاعدة البيانات. هل أنت متأكد؟')) return;
+    const res = await sbFetch('teachers', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+    if (res) {
+      alert('تم مسح جميع المعلمين بنجاح');
+      fetchTeachers();
+      setSelectedTeacher(null);
+    }
+  };
 
   const filteredTeachers = teachers.filter(t => 
     t.full_name.includes(search) || t.teacher_no.includes(search)
@@ -56,18 +103,36 @@ export const Teachers: React.FC = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text2">رقم المعلم *</label>
-              <input className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" placeholder="مثال: T001" />
+              <input 
+                className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                placeholder="مثال: T001" 
+                value={formData.teacher_no}
+                onChange={(e) => setFormData({...formData, teacher_no: e.target.value})}
+              />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text2">اسم المعلم *</label>
-              <input className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" placeholder="الاسم الرباعي" />
+              <input 
+                className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                placeholder="الاسم الرباعي" 
+                value={formData.full_name}
+                onChange={(e) => setFormData({...formData, full_name: e.target.value})}
+              />
             </div>
             <div className="col-span-2 space-y-1.5">
               <label className="text-xs font-bold text-text2">رقم الجوال *</label>
-              <input className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" placeholder="+966 5xxxxxxxx" />
+              <input 
+                className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                placeholder="+966 5xxxxxxxx" 
+                value={formData.phone}
+                onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              />
             </div>
           </div>
-          <button className="w-full mt-6 bg-accent text-white font-bold py-3 rounded-xl hover:bg-accent/90 transition-all flex items-center justify-center gap-2">
+          <button 
+            onClick={handleAddTeacher}
+            className="w-full mt-6 bg-accent text-white font-bold py-3 rounded-xl hover:bg-accent/90 transition-all flex items-center justify-center gap-2"
+          >
             <Plus size={18} />
             إضافة معلم وإنشاء QR
           </button>
@@ -113,7 +178,15 @@ export const Teachers: React.FC = () => {
       {/* Teachers Table */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <div className="p-5 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h3 className="font-bold text-sm">قائمة المعلمين</h3>
+          <div className="flex items-center gap-4">
+            <h3 className="font-bold text-sm">قائمة المعلمين</h3>
+            <button 
+              onClick={handleClearAll}
+              className="px-3 py-1 bg-red/10 text-red border border-red/20 rounded-lg text-[10px] font-bold hover:bg-red hover:text-white transition-all flex items-center gap-1"
+            >
+              <Trash2 size={12} /> مسح الكل
+            </button>
+          </div>
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-text3" size={16} />
             <input 
@@ -138,12 +211,19 @@ export const Teachers: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {filteredTeachers.map((t, i) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="p-10 text-center">
+                    <Loader2 className="mx-auto animate-spin text-accent mb-2" size={32} />
+                    <p className="text-xs text-text3">جاري تحميل بيانات المعلمين...</p>
+                  </td>
+                </tr>
+              ) : filteredTeachers.length > 0 ? filteredTeachers.map((t, i) => (
                 <tr 
-                  key={i} 
+                  key={t.id || i} 
                   className={cn(
                     "hover:bg-white/5 transition-colors cursor-pointer",
-                    selectedTeacher?.teacher_no === t.teacher_no && "bg-accent/5"
+                    selectedTeacher?.id === t.id && "bg-accent/5"
                   )}
                   onClick={() => setSelectedTeacher(t)}
                 >
@@ -151,22 +231,31 @@ export const Teachers: React.FC = () => {
                   <td className="px-6 py-4 text-text2">{t.full_name}</td>
                   <td className="px-6 py-4 text-text3 font-mono text-xs" dir="ltr">{t.phone}</td>
                   <td className="px-6 py-4">
-                    <div className="flex gap-1">
-                      <span className="px-2 py-0.5 bg-bg3 border border-border rounded-md text-[10px] text-text3">لجنة 1A</span>
-                      <span className="px-2 py-0.5 bg-bg3 border border-border rounded-md text-[10px] text-text3">لجنة 2B</span>
-                    </div>
+                    <span className="text-[10px] text-text3 italic">سيتم عرض اللجان لاحقاً</span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="px-2 py-1 bg-green/10 text-green text-[10px] font-bold rounded-md border border-green/20">اليوم</span>
+                    <span className="px-2 py-1 bg-green/10 text-green text-[10px] font-bold rounded-md border border-green/20">نشط</span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <button className="p-1.5 bg-bg3 text-text3 rounded-lg hover:text-accent transition-colors"><Edit size={14} /></button>
-                      <button className="p-1.5 bg-bg3 text-text3 rounded-lg hover:text-red transition-colors"><Trash2 size={14} /></button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (t.id) handleDelete(t.id);
+                        }}
+                        className="p-1.5 bg-bg3 text-text3 rounded-lg hover:text-red transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </td>
                 </tr>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan={6} className="p-10 text-center text-text3">لا يوجد معلمين مسجلين حالياً</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

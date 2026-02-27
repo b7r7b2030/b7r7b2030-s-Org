@@ -27,6 +27,16 @@ export const Committees: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [printMode, setPrintMode] = useState<'none' | 'door' | 'envelope'>('none');
   const [selectedCommittee, setSelectedCommittee] = useState<Committee | null>(null);
+  const [formData, setFormData] = useState<Partial<Committee>>({
+    name: '',
+    location: '',
+    subject: '',
+    exam_date: new Date().toISOString().split('T')[0],
+    start_time: '08:00',
+    end_time: '10:00'
+  });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -91,6 +101,20 @@ export const Committees: React.FC = () => {
     window.print();
   };
 
+  const handleSaveCommittee = async () => {
+    setSaving(true);
+    // Ensure no nulls are sent to DB for required fields if any, though here we just want to avoid null in inputs
+    const res = formData.id 
+      ? await sbFetch('committees', 'PATCH', formData, `?id=eq.${formData.id}`)
+      : await sbFetch('committees', 'POST', formData);
+    
+    if (res) {
+      setIsModalOpen(false);
+      fetchData();
+    }
+    setSaving(false);
+  };
+
   if (printMode !== 'none') {
     const committeesToPrint = selectedCommittee ? [selectedCommittee] : committees;
 
@@ -141,6 +165,12 @@ export const Committees: React.FC = () => {
                     <div className="bg-black text-white py-4 px-12 rounded-[30px] inline-block shadow-xl">
                       <span className="text-[100px] font-black leading-none">{c.name}</span>
                     </div>
+                    {c.location && (
+                      <div className="mt-4">
+                        <p className="text-2xl font-bold text-gray-600">مقر اللجنة:</p>
+                        <p className="text-4xl font-black text-black">{c.location}</p>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Grade Counts Section */}
@@ -269,10 +299,10 @@ export const Committees: React.FC = () => {
               <thead className="bg-bg3/50 text-text3 text-[10px] font-bold uppercase tracking-wider">
                 <tr>
                   <th className="px-6 py-3">اللجنة</th>
+                  <th className="px-6 py-3">المقر</th>
                   <th className="px-6 py-3">المادة</th>
                   <th className="px-6 py-3">المعلم المراقب</th>
                   <th className="px-6 py-3">عدد الطلاب</th>
-                  <th className="px-6 py-3">التاريخ والوقت</th>
                   <th className="px-6 py-3">الإجراءات</th>
                 </tr>
               </thead>
@@ -287,7 +317,8 @@ export const Committees: React.FC = () => {
                         <span className="font-bold text-text">لجنة {c.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-text2 font-medium">{c.subject}</td>
+                    <td className="px-6 py-4 text-text2 font-bold">{c.location || '—'}</td>
+                    <td className="px-6 py-4 text-text2 font-medium">{c.subject || '—'}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 text-text3">
                         <UserSquare2 size={14} />
@@ -297,18 +328,6 @@ export const Committees: React.FC = () => {
                     <td className="px-6 py-4">
                       <div className="inline-flex items-center gap-2 px-3 py-1 bg-accent/10 text-accent rounded-full text-xs font-bold">
                         {getStudentCount(c.name)} طالب
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1 text-xs text-text2">
-                          <Calendar size={12} />
-                          {c.exam_date}
-                        </div>
-                        <div className="flex items-center gap-1 text-[10px] text-text3">
-                          <Clock size={12} />
-                          {c.start_time} - {c.end_time}
-                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -333,7 +352,34 @@ export const Committees: React.FC = () => {
                         >
                           <FileText size={16} />
                         </button>
-                        <button className="p-2 bg-bg3 text-text3 rounded-xl hover:text-accent transition-all"><Edit size={16} /></button>
+                        <button 
+                          onClick={() => {
+                            const cleanData = {
+                              ...c,
+                              name: c.name || '',
+                              location: c.location || '',
+                              subject: c.subject || '',
+                              start_time: c.start_time || '08:00',
+                              end_time: c.end_time || '10:00'
+                            };
+                            setFormData(cleanData);
+                            setIsModalOpen(true);
+                          }}
+                          className="p-2 bg-bg3 text-text3 rounded-xl hover:text-accent transition-all"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            if(confirm('حذف اللجنة؟')) {
+                              await sbFetch('committees', 'DELETE', null, `?id=eq.${c.id}`);
+                              fetchData();
+                            }
+                          }}
+                          className="p-2 bg-bg3 text-text3 rounded-xl hover:text-red transition-all"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -355,6 +401,82 @@ export const Committees: React.FC = () => {
           )}
         </div>
       </div>
+      {/* Edit Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-border flex items-center justify-between bg-bg3/50">
+              <h3 className="font-bold text-lg">{formData.id ? 'تعديل لجنة' : 'إضافة لجنة'}</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-text3 hover:text-text transition-colors">
+                <Plus size={24} className="rotate-45" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text2">اسم اللجنة</label>
+                <input 
+                  className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text2">مقر اللجنة</label>
+                <input 
+                  className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                  placeholder="مثال: المعمل، القاعة الكبرى"
+                  value={formData.location || ''}
+                  onChange={(e) => setFormData({...formData, location: e.target.value})}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text2">المادة</label>
+                <input 
+                  className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                  value={formData.subject || ''}
+                  onChange={(e) => setFormData({...formData, subject: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-text2">وقت البدء</label>
+                  <input 
+                    type="time"
+                    className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                    value={formData.start_time || ''}
+                    onChange={(e) => setFormData({...formData, start_time: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-text2">وقت الانتهاء</label>
+                  <input 
+                    type="time"
+                    className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent" 
+                    value={formData.end_time || ''}
+                    onChange={(e) => setFormData({...formData, end_time: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="p-6 bg-bg3/50 border-t border-border flex gap-3">
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="flex-1 py-3 bg-bg3 border border-border text-text2 font-bold rounded-xl hover:bg-card transition-all"
+              >
+                إلغاء
+              </button>
+              <button 
+                onClick={handleSaveCommittee}
+                disabled={saving}
+                className="flex-1 py-3 bg-accent text-white font-bold rounded-xl hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 flex items-center justify-center gap-2"
+              >
+                {saving && <RefreshCw size={18} className="animate-spin" />}
+                حفظ التغييرات
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

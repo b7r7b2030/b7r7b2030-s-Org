@@ -25,6 +25,7 @@ export const Students: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('الكل');
+  const grades = ['الكل', 'أول ثانوي', 'ثاني ثانوي', 'ثالث ثانوي'];
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
@@ -154,7 +155,16 @@ export const Students: React.FC = () => {
 
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.full_name.includes(search) || s.student_no.includes(search);
-    const matchesFilter = filter === 'الكل' || s.grade === filter;
+    
+    if (filter === 'الكل') return matchesSearch;
+
+    // Normalize comparison for Arabic grades
+    const grade = s.grade || '';
+    const matchesFilter = 
+      (filter === 'أول ثانوي' && (grade.includes('أول') || grade.includes('الأول'))) ||
+      (filter === 'ثاني ثانوي' && (grade.includes('ثاني') || grade.includes('الثاني'))) ||
+      (filter === 'ثالث ثانوي' && (grade.includes('ثالث') || grade.includes('الثالث')));
+
     return matchesSearch && matchesFilter;
   });
 
@@ -316,7 +326,7 @@ export const Students: React.FC = () => {
           <h3 className="font-bold text-sm">قائمة الطلاب</h3>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex bg-bg3 p-1 rounded-xl border border-border">
-              {['الكل', 'الأول', 'الثاني', 'الثالث', 'الرابع'].map(f => (
+              {grades.map(f => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}

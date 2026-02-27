@@ -40,15 +40,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.COUNSELOR] },
     { id: 'alerts', label: 'التنبيهات', icon: Bell, badge: alertCount, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR] },
-    { id: 'students', label: 'الطلاب', icon: Users, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR] },
+    { id: 'students', label: 'الطلاب', icon: Users, roles: [UserRole.PRINCIPAL] },
     { id: 'teachers', label: 'المعلمون', icon: UserSquare2, roles: [UserRole.PRINCIPAL] },
     { id: 'committees', label: 'اللجان', icon: School, roles: [UserRole.PRINCIPAL, UserRole.TEACHER] },
+    { id: 'teacherassignment', label: 'توزيع المعلمين', icon: Users, roles: [UserRole.PRINCIPAL] },
     { id: 'envelopes', label: 'المظاريف', icon: Package, roles: [UserRole.PRINCIPAL, UserRole.TEACHER] },
-    { id: 'attendance', label: 'التحضير', icon: CheckCircle2, roles: [UserRole.TEACHER] },
-    { id: 'examschedule', label: 'الجدول', icon: Calendar, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR] },
+    { id: 'attendance', label: 'التحضير', icon: CheckCircle2, roles: [UserRole.TEACHER, UserRole.COUNSELOR] },
+    { id: 'examschedule', label: 'الجدول', icon: Calendar, roles: [UserRole.PRINCIPAL] },
     { id: 'qrcodes', label: 'QR', icon: QrCode, roles: [UserRole.PRINCIPAL, UserRole.TEACHER] },
     { id: 'reports', label: 'تقارير', icon: BarChart3, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR] },
-    { id: 'analytics', label: 'تحليل', icon: TrendingUp, roles: [UserRole.PRINCIPAL] },
+    { id: 'analytics', label: 'تحليل', icon: TrendingUp, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR] },
     { id: 'setup', label: 'إعداد', icon: Settings, roles: [UserRole.PRINCIPAL] },
   ];
 

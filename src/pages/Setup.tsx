@@ -49,15 +49,26 @@ CREATE TABLE IF NOT EXISTS teachers (
 CREATE TABLE IF NOT EXISTS committees (
     id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     name        TEXT        NOT NULL,
-    subject     TEXT        NOT NULL,
+    location    TEXT,
+    subject     TEXT,
     teacher_id  UUID        REFERENCES teachers(id) ON DELETE SET NULL,
-    exam_date   DATE        NOT NULL,
-    start_time  TIME        NOT NULL,
-    end_time    TIME        NOT NULL,
+    exam_date   DATE,
+    start_time  TIME,
+    end_time    TIME,
     room_no     TEXT,
     status      TEXT        DEFAULT 'scheduled' CHECK (status IN ('scheduled','active','completed','cancelled')),
     created_at  TIMESTAMPTZ DEFAULT now(),
     updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS teacher_assignments (
+    id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    teacher_id    UUID        NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+    committee_id  UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
+    exam_date     DATE        NOT NULL,
+    period        INTEGER     NOT NULL,
+    created_at    TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (teacher_id, exam_date, period)
 );
 
 CREATE TABLE IF NOT EXISTS envelopes (
@@ -100,22 +111,35 @@ CREATE TABLE IF NOT EXISTS exam_schedules (
 );
 
 -- 2. التقارير الذكية (Views)
-CREATE OR REPLACE VIEW v_envelope_tracking AS
-SELECT
-    e.envelope_no,
-    e.status AS envelope_status,
+DROP VIEW IF EXISTS v_committee_summary;
+CREATE OR REPLACE VIEW v_committee_summary AS
+SELECT 
+    c.id AS committee_id,
     c.name AS committee_name,
-    c.subject,
-    c.exam_date,
-    t.full_name AS teacher_name,
-    e.received_at,
-    e.exam_ended_at,
-    e.delivered_at,
-    e.paper_count,
-    e.notes
-FROM envelopes e
-JOIN committees c ON e.committee_id = c.id
-LEFT JOIN teachers t ON e.received_by = t.id;
+    COUNT(s.id) AS total_students,
+    COUNT(a.id) FILTER (WHERE a.status = 'present') AS present_count,
+    COUNT(a.id) FILTER (WHERE a.status = 'absent') AS absent_count,
+    COUNT(a.id) FILTER (WHERE a.status = 'late') AS late_count
+FROM committees c
+LEFT JOIN students s ON s.committee_name = c.name
+LEFT JOIN attendance a ON a.committee_id = c.id AND a.student_id = s.id
+GROUP BY c.id, c.name;
+
+DROP VIEW IF EXISTS v_absent_students;
+CREATE OR REPLACE VIEW v_absent_students AS
+SELECT 
+    s.id AS student_id,
+    s.full_name,
+    s.student_no,
+    s.grade,
+    s.classroom,
+    s.phone,
+    c.name AS committee_name,
+    a.recorded_at
+FROM students s
+JOIN attendance a ON s.id = a.student_id
+JOIN committees c ON a.committee_id = c.id
+WHERE a.status = 'absent';
 
 -- 3. تفعيل RLS
 ALTER TABLE students ENABLE ROW LEVEL SECURITY;
@@ -123,12 +147,16 @@ ALTER TABLE teachers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE committees ENABLE ROW LEVEL SECURITY;
 ALTER TABLE envelopes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE teacher_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exam_schedules ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow All" ON students FOR ALL USING (true);
 CREATE POLICY "Allow All" ON teachers FOR ALL USING (true);
 CREATE POLICY "Allow All" ON committees FOR ALL USING (true);
 CREATE POLICY "Allow All" ON envelopes FOR ALL USING (true);
 CREATE POLICY "Allow All" ON attendance FOR ALL USING (true);
+CREATE POLICY "Allow All" ON teacher_assignments FOR ALL USING (true);
+CREATE POLICY "Allow All" ON exam_schedules FOR ALL USING (true);
 `;
 
 export const Setup: React.FC = () => {
@@ -180,32 +208,53 @@ export const Setup: React.FC = () => {
         </button>
       </div>
 
-      <div className="bg-card border border-border rounded-2xl p-6 relative overflow-hidden">
-        <div className="absolute top-0 right-0 px-4 py-1 bg-red text-white text-[10px] font-bold rounded-bl-xl">منطقة الخطر</div>
-        <h3 className="font-bold text-sm mb-4 flex items-center gap-2">
-          <AlertCircle size={18} className="text-red" />
-          تهيئة البيانات
-        </h3>
-        <p className="text-xs text-text3 mb-6 leading-relaxed">
-          سيؤدي هذا الإجراء إلى مسح جميع بيانات الطلاب المسجلة حالياً في قاعدة البيانات. يرجى التأكد قبل المتابعة حيث لا يمكن التراجع عن هذا الإجراء.
-        </p>
-        <button 
-          onClick={async () => {
-            if(confirm('هل أنت متأكد من رغبتك في مسح جميع بيانات الطلاب؟ لا يمكن التراجع عن هذا الإجراء.')) {
-              const res = await sbFetch('students', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
-              if (res) {
-                alert('تم مسح جميع بيانات الطلاب بنجاح');
-              } else {
-                alert('حدث خطأ أثناء مسح البيانات. تأكد من إعدادات Supabase.');
-              }
-            }
-          }}
-          className="px-8 py-3 bg-red/10 border border-red/20 text-red font-bold rounded-xl hover:bg-red hover:text-white transition-all flex items-center gap-2"
-        >
-          <Trash2 size={18} />
-          مسح جميع بيانات الطلاب
-        </button>
-      </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-card border border-border rounded-2xl p-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 px-4 py-1 bg-red text-white text-[10px] font-bold rounded-bl-xl">منطقة الخطر</div>
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2">
+              <AlertCircle size={18} className="text-red" />
+              تهيئة بيانات الطلاب
+            </h3>
+            <p className="text-xs text-text3 mb-6 leading-relaxed">
+              سيؤدي هذا الإجراء إلى مسح جميع بيانات الطلاب المسجلة حالياً في قاعدة البيانات.
+            </p>
+            <button 
+              onClick={async () => {
+                if(confirm('هل أنت متأكد من رغبتك في مسح جميع بيانات الطلاب؟')) {
+                  const res = await sbFetch('students', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                  if (res) alert('تم مسح جميع بيانات الطلاب بنجاح');
+                }
+              }}
+              className="w-full py-3 bg-red/10 border border-red/20 text-red font-bold rounded-xl hover:bg-red hover:text-white transition-all flex items-center justify-center gap-2"
+            >
+              <Trash2 size={18} />
+              مسح جميع بيانات الطلاب
+            </button>
+          </div>
+
+          <div className="bg-card border border-border rounded-2xl p-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 px-4 py-1 bg-red text-white text-[10px] font-bold rounded-bl-xl">منطقة الخطر</div>
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2">
+              <AlertCircle size={18} className="text-red" />
+              تهيئة بيانات المعلمين
+            </h3>
+            <p className="text-xs text-text3 mb-6 leading-relaxed">
+              سيؤدي هذا الإجراء إلى مسح جميع بيانات المعلمين المسجلة حالياً في قاعدة البيانات.
+            </p>
+            <button 
+              onClick={async () => {
+                if(confirm('هل أنت متأكد من رغبتك في مسح جميع بيانات المعلمين؟')) {
+                  const res = await sbFetch('teachers', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                  if (res) alert('تم مسح جميع بيانات المعلمين بنجاح');
+                }
+              }}
+              className="w-full py-3 bg-red/10 border border-red/20 text-red font-bold rounded-xl hover:bg-red hover:text-white transition-all flex items-center justify-center gap-2"
+            >
+              <Trash2 size={18} />
+              مسح جميع بيانات المعلمين
+            </button>
+          </div>
+        </div>
 
       <div className="bg-card border border-border rounded-2xl p-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 px-4 py-1 bg-purple text-white text-[10px] font-bold rounded-bl-xl">إدارة الجدولة</div>

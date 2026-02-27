@@ -19,21 +19,26 @@ import {
   Tooltip
 } from 'recharts';
 import { cn } from '../lib/utils';
-import { Student, Committee } from '../types';
+import { Student, Committee, UserRole } from '../types';
 import { sbFetch } from '../services/supabase';
 
-export const Attendance: React.FC = () => {
+export const Attendance: React.FC<{ userRole?: UserRole }> = ({ userRole }) => {
   const [students, setStudents] = useState<Student[]>([]);
   const [committees, setCommittees] = useState<Committee[]>([]);
+  const [absentStudents, setAbsentStudents] = useState<any[]>([]);
   const [selectedCommittee, setSelectedCommittee] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, string>>({});
 
   const gradeOrder: Record<string, number> = {
+    'أول ثانوي': 1,
     'الأول الثانوي': 1,
     'الأول': 1,
+    'ثاني ثانوي': 2,
     'الثاني الثانوي': 2,
     'الثاني': 2,
+    'ثالث ثانوي': 3,
     'الثالث الثانوي': 3,
     'الثالث': 3
   };
@@ -44,9 +49,11 @@ export const Attendance: React.FC = () => {
 
   const fetchInitialData = async () => {
     setLoading(true);
-    const [cData, sData] = await Promise.all([
+    const [cData, sData, aData, absData] = await Promise.all([
       sbFetch<Committee>('committees', 'GET', null, '?select=*&order=name'),
-      sbFetch<Student>('students', 'GET', null, '?select=*')
+      sbFetch<Student>('students', 'GET', null, '?select=*'),
+      sbFetch<any>('attendance', 'GET', null, '?select=student_id,status'),
+      sbFetch<any>('v_absent_students', 'GET', null, '?select=*')
     ]);
     
     if (cData) {
@@ -54,13 +61,30 @@ export const Attendance: React.FC = () => {
       if (cData.length > 0) setSelectedCommittee(cData[0].name);
     }
     if (sData) setStudents(sData);
+    if (aData) {
+      const map: any = {};
+      aData.forEach((a: any) => map[a.student_id] = a.status);
+      setAttendanceMap(map);
+    }
+    if (absData) setAbsentStudents(absData);
     setLoading(false);
   };
 
   const markStatus = async (studentId: string, status: string) => {
-    // In a real app, we would save this to an 'attendance' table
-    // For now, we'll just update the local state as a demo
-    alert(`تم تسجيل ${status === 'present' ? 'حضور' : 'غياب'} الطالب`);
+    const committeeId = committees.find(c => c.name === selectedCommittee)?.id;
+    if (!committeeId) return;
+
+    const res = await sbFetch('attendance', 'POST', {
+      student_id: studentId,
+      committee_id: committeeId,
+      status: status,
+      recorded_at: new Date().toISOString()
+    });
+
+    if (res) {
+      setAttendanceMap(prev => ({ ...prev, [studentId]: status }));
+      fetchInitialData(); // Refresh absent list
+    }
   };
 
   const filteredStudents = students
@@ -74,10 +98,72 @@ export const Attendance: React.FC = () => {
     });
 
   const statsData = [
-    { name: 'حاضر', value: 28, color: '#10b981' },
-    { name: 'غائب', value: 2, color: '#ef4444' },
-    { name: 'متأخر', value: 1, color: '#f59e0b' },
+    { name: 'حاضر', value: Object.values(attendanceMap).filter(v => v === 'present').length, color: '#10b981' },
+    { name: 'غائب', value: Object.values(attendanceMap).filter(v => v === 'absent').length, color: '#ef4444' },
+    { name: 'متأخر', value: Object.values(attendanceMap).filter(v => v === 'late').length, color: '#f59e0b' },
   ];
+
+  if (userRole === UserRole.COUNSELOR) {
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="bg-card border border-border rounded-2xl overflow-hidden">
+          <div className="p-5 border-b border-border flex items-center justify-between">
+            <h3 className="font-bold text-sm flex items-center gap-2">
+              <XCircle size={18} className="text-red" />
+              قائمة الطلاب الغائبين (متابعة المرشد)
+            </h3>
+            <div className="text-xs text-text3">إجمالي الغياب: {absentStudents.length}</div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-sm">
+              <thead className="bg-bg3/50 text-text3 text-[10px] font-bold uppercase tracking-wider">
+                <tr>
+                  <th className="px-6 py-3">اسم الطالب</th>
+                  <th className="px-6 py-3">الصف</th>
+                  <th className="px-6 py-3">اللجنة</th>
+                  <th className="px-6 py-3">رقم الجوال</th>
+                  <th className="px-6 py-3">الإجراء</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {absentStudents.map((s, i) => (
+                  <tr key={i} className="hover:bg-white/5 transition-colors">
+                    <td className="px-6 py-4 font-bold text-text">{s.full_name}</td>
+                    <td className="px-6 py-4 text-text2">{s.grade}</td>
+                    <td className="px-6 py-4 text-text2">{s.committee_name}</td>
+                    <td className="px-6 py-4 text-accent font-bold" dir="ltr">{s.phone || '—'}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex gap-2">
+                        <a 
+                          href={`tel:${s.phone}`}
+                          className="p-2 bg-accent/10 text-accent rounded-xl hover:bg-accent hover:text-white transition-all flex items-center gap-2 text-xs font-bold"
+                        >
+                          <Phone size={14} /> اتصال
+                        </a>
+                        <a 
+                          href={`https://wa.me/${s.phone?.replace('+', '')}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 bg-green/10 text-green rounded-xl hover:bg-green hover:text-white transition-all flex items-center gap-2 text-xs font-bold"
+                        >
+                          <MessageSquare size={14} /> واتساب
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {absentStudents.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-10 text-center text-text3">لا يوجد غياب مسجل حالياً</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -144,19 +230,32 @@ export const Attendance: React.FC = () => {
                       <td className="px-6 py-4 font-bold text-text">{s.seat_no}</td>
                       <td className="px-6 py-4 text-text2">{s.full_name}</td>
                       <td className="px-6 py-4">
-                        <span className="text-text3 text-[10px] font-bold">بانتظار التحضير</span>
+                        <span className={cn(
+                          "px-2 py-0.5 text-[10px] font-bold rounded-full",
+                          attendanceMap[s.id!] === 'present' ? "bg-green/10 text-green" : 
+                          attendanceMap[s.id!] === 'absent' ? "bg-red/10 text-red" : "text-text3"
+                        )}>
+                          {attendanceMap[s.id!] === 'present' ? 'حاضر' : 
+                           attendanceMap[s.id!] === 'absent' ? 'غائب' : 'بانتظار التحضير'}
+                        </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex gap-2">
                           <button 
                             onClick={() => s.id && markStatus(s.id, 'present')}
-                            className="p-1.5 bg-green/10 text-green rounded-lg hover:bg-green hover:text-white transition-all"
+                            className={cn(
+                              "p-1.5 rounded-lg transition-all",
+                              attendanceMap[s.id!] === 'present' ? "bg-green text-white" : "bg-green/10 text-green hover:bg-green hover:text-white"
+                            )}
                           >
                             <CheckCircle2 size={14} />
                           </button>
                           <button 
                             onClick={() => s.id && markStatus(s.id, 'absent')}
-                            className="p-1.5 bg-red/10 text-red rounded-lg hover:bg-red hover:text-white transition-all"
+                            className={cn(
+                              "p-1.5 rounded-lg transition-all",
+                              attendanceMap[s.id!] === 'absent' ? "bg-red text-white" : "bg-red/10 text-red hover:bg-red hover:text-white"
+                            )}
                           >
                             <XCircle size={14} />
                           </button>

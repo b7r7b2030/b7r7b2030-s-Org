@@ -48,14 +48,26 @@ export interface Teacher {
 export interface Committee {
   id?: string;
   name: string;
-  subject: string;
+  location?: string; // مقر اللجنة
+  subject?: string;
   teacher_id?: string;
   teacher_name?: string;
-  exam_date: string;
-  start_time: string;
-  end_time: string;
+  exam_date?: string;
+  start_time?: string;
+  end_time?: string;
   student_count?: number;
   present_count?: number;
+  created_at?: string;
+}
+
+export interface TeacherAssignment {
+  id?: string;
+  teacher_id: string;
+  teacher_name?: string;
+  committee_id: string;
+  committee_name?: string;
+  exam_date: string;
+  period: number;
   created_at?: string;
 }
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Bell, 
   AlertCircle, 
@@ -6,60 +6,162 @@ import {
   CheckCircle2, 
   Settings,
   Phone,
-  ArrowLeft
+  ArrowLeft,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-
-const alerts = [
-  { id: 1, type: 'red', title: 'غياب: أحمد محمد علي', desc: 'اللجنة: 3A | المادة: اللغة العربية | المعلم: سعد الغامدي', time: 'منذ 2 دقيقة' },
-  { id: 2, type: 'red', title: 'غياب: فيصل عبدالله القحطاني', desc: 'اللجنة: 1C | المادة: الرياضيات | المعلم: محمد العتيبي', time: 'منذ 7 دقائق' },
-  { id: 3, type: 'gold', title: 'تأخر استلام مظروف — ENV-003', desc: 'لجنة 4A — الإنجليزية — تأخر عن الموعد بـ 18 دقيقة', time: 'منذ 5 دقائق' },
-  { id: 4, type: 'blue', title: 'تحديث قاعدة البيانات', desc: 'تمت مزامنة 156 سجل بنجاح مع Supabase', time: 'منذ 1 ساعة' },
-];
+import { sbFetch } from '../services/supabase';
 
 export const Alerts: React.FC = () => {
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'absent' | 'delay'>('all');
+
+  useEffect(() => {
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchAlerts = async () => {
+    setLoading(true);
+    try {
+      const [absentData, envelopeData] = await Promise.all([
+        sbFetch<any>('v_absent_students', 'GET', null, '?select=*'),
+        sbFetch<any>('envelopes', 'GET', null, '?status=neq.delivered&select=*,committees(name)')
+      ]);
+
+      const formattedAlerts: any[] = [];
+
+      if (absentData) {
+        absentData.forEach((a: any) => {
+          formattedAlerts.push({
+            id: `absent-${a.student_no}`,
+            type: 'red',
+            category: 'absent',
+            title: `غياب: ${a.full_name}`,
+            desc: `اللجنة: ${a.committee_name} | الصف: ${a.grade} | الفصل: ${a.classroom}`,
+            time: a.recorded_at ? new Date(a.recorded_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد',
+            phone: a.phone
+          });
+        });
+      }
+
+      if (envelopeData) {
+        envelopeData.forEach((e: any) => {
+          formattedAlerts.push({
+            id: `envelope-${e.envelope_no}`,
+            type: 'gold',
+            category: 'delay',
+            title: `تأخر استلام مظروف — ${e.envelope_no}`,
+            desc: `اللجنة: ${e.committees?.name || 'غير محدد'} | الحالة: ${e.status === 'pending' ? 'لم يستلم' : 'قيد الاختبار'}`,
+            time: e.updated_at ? new Date(e.updated_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد'
+          });
+        });
+      }
+
+      // Sort by time (most recent first) - this is a bit tricky with formatted strings, 
+      // but in a real app we'd sort the raw data first.
+      setAlerts(formattedAlerts);
+    } catch (error) {
+      console.error("Error fetching alerts:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredAlerts = alerts.filter(a => {
+    if (filter === 'all') return true;
+    return a.category === filter;
+  });
+
+  const counts = {
+    all: alerts.length,
+    absent: alerts.filter(a => a.category === 'absent').length,
+    delay: alerts.filter(a => a.category === 'delay').length
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           <div className="flex gap-2 overflow-x-auto pb-2">
-            <button className="px-4 py-1.5 bg-accent text-white rounded-full text-xs font-bold whitespace-nowrap">الكل (4)</button>
-            <button className="px-4 py-1.5 bg-bg3 text-text3 rounded-full text-xs font-bold whitespace-nowrap hover:text-text">غياب (2)</button>
-            <button className="px-4 py-1.5 bg-bg3 text-text3 rounded-full text-xs font-bold whitespace-nowrap hover:text-text">تأخر مظاريف (1)</button>
+            <button 
+              onClick={() => setFilter('all')}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all",
+                filter === 'all' ? "bg-accent text-white" : "bg-bg3 text-text3 hover:text-text"
+              )}
+            >
+              الكل ({counts.all})
+            </button>
+            <button 
+              onClick={() => setFilter('absent')}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all",
+                filter === 'absent' ? "bg-red text-white" : "bg-bg3 text-text3 hover:text-text"
+              )}
+            >
+              غياب ({counts.absent})
+            </button>
+            <button 
+              onClick={() => setFilter('delay')}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all",
+                filter === 'delay' ? "bg-gold text-black" : "bg-bg3 text-text3 hover:text-text"
+              )}
+            >
+              تأخر مظاريف ({counts.delay})
+            </button>
           </div>
 
-          <div className="bg-card border border-border rounded-2xl divide-y divide-border/50">
-            {alerts.map((alert) => (
-              <div key={alert.id} className="p-5 flex items-start gap-4 hover:bg-white/5 transition-colors">
-                <div className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-                  alert.type === 'red' && "bg-red/10 text-red",
-                  alert.type === 'gold' && "bg-gold/10 text-gold",
-                  alert.type === 'blue' && "bg-accent/10 text-accent"
-                )}>
-                  {alert.type === 'red' && <AlertCircle size={20} />}
-                  {alert.type === 'gold' && <Clock size={20} />}
-                  {alert.type === 'blue' && <Settings size={20} />}
-                </div>
-                <div className="flex-1">
-                  <h4 className={cn(
-                    "text-sm font-bold",
-                    alert.type === 'red' && "text-red-300",
-                    alert.type === 'gold' && "text-gold-300",
-                    alert.type === 'blue' && "text-accent2"
-                  )}>{alert.title}</h4>
-                  <p className="text-xs text-text3 mt-1 leading-relaxed">{alert.desc}</p>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <span className="text-[10px] text-text3 font-medium whitespace-nowrap">{alert.time}</span>
-                  {alert.type === 'red' && (
-                    <button className="px-3 py-1 bg-bg3 border border-border rounded-lg text-[10px] font-bold text-text2 hover:text-text transition-all flex items-center gap-1">
-                      <Phone size={12} /> تواصل
-                    </button>
-                  )}
-                </div>
+          <div className="bg-card border border-border rounded-2xl divide-y divide-border/50 min-h-[400px]">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center p-20 space-y-4">
+                <RefreshCw size={40} className="text-accent animate-spin" />
+                <p className="text-sm text-text3">جاري تحديث التنبيهات...</p>
               </div>
-            ))}
+            ) : filteredAlerts.length > 0 ? (
+              filteredAlerts.map((alert) => (
+                <div key={alert.id} className="p-5 flex items-start gap-4 hover:bg-white/5 transition-colors">
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                    alert.type === 'red' && "bg-red/10 text-red",
+                    alert.type === 'gold' && "bg-gold/10 text-gold",
+                    alert.type === 'blue' && "bg-accent/10 text-accent"
+                  )}>
+                    {alert.type === 'red' && <AlertCircle size={20} />}
+                    {alert.type === 'gold' && <Clock size={20} />}
+                    {alert.type === 'blue' && <Settings size={20} />}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className={cn(
+                      "text-sm font-bold",
+                      alert.type === 'red' && "text-red-300",
+                      alert.type === 'gold' && "text-gold-300",
+                      alert.type === 'blue' && "text-accent2"
+                    )}>{alert.title}</h4>
+                    <p className="text-xs text-text3 mt-1 leading-relaxed">{alert.desc}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className="text-[10px] text-text3 font-medium whitespace-nowrap">{alert.time}</span>
+                    {alert.type === 'red' && alert.phone && (
+                      <a 
+                        href={`tel:${alert.phone}`}
+                        className="px-3 py-1 bg-bg3 border border-border rounded-lg text-[10px] font-bold text-text2 hover:text-text transition-all flex items-center gap-1"
+                      >
+                        <Phone size={12} /> تواصل
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center p-20 text-center space-y-4 opacity-40">
+                <Bell size={64} className="text-text3" />
+                <p className="text-sm text-text3 font-medium">لا توجد تنبيهات نشطة حالياً</p>
+              </div>
+            )}
           </div>
         </div>
 

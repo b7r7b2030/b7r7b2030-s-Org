@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   UserSquare2, 
@@ -9,7 +9,8 @@ import {
   Clock,
   Package,
   ArrowLeft,
-  School
+  School,
+  RefreshCw
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -22,42 +23,125 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
-  AreaChart,
-  Area
 } from 'recharts';
 import { cn } from '../lib/utils';
-
-const stats = [
-  { label: 'إجمالي الطلاب', value: '1,240', icon: Users, color: 'blue', change: '+12 هذا الأسبوع', trend: 'up' },
-  { label: 'المعلمون المراقبون', value: '86', icon: UserSquare2, color: 'gold', change: 'نشط', trend: 'up' },
-  { label: 'الحاضرون اليوم', value: '1,142', icon: CheckCircle2, color: 'green', change: '92%', trend: 'up' },
-  { label: 'الغائبون اليوم', value: '98', icon: XCircle, color: 'red', change: '8%', trend: 'down' },
-];
-
-const attendanceData = [
-  { name: 'الأحد', حضور: 145, غياب: 12 },
-  { name: 'الاثنين', حضور: 138, غياب: 19 },
-  { name: 'الثلاثاء', حضور: 152, غياب: 5 },
-  { name: 'الأربعاء', حضور: 140, غياب: 17 },
-  { name: 'الخميس', حضور: 148, غياب: 9 },
-];
-
-const envelopeData = [
-  { name: 'تم التسليم', value: 5, color: '#10b981' },
-  { name: 'جارٍ الاختبار', value: 5, color: '#3b82f6' },
-  { name: 'لم يُستلم', value: 2, color: '#ef4444' },
-];
-
-const activity = [
-  { id: 1, type: 'success', title: 'تم تسجيل حضور 28 طالب', desc: 'لجنة 4A — الرياضيات', time: 'الآن', icon: CheckCircle2 },
-  { id: 2, type: 'info', title: 'مسح QR المظروف', desc: 'المعلم: سعد الغامدي — لجنة 3B', time: '3 د', icon: Package },
-  { id: 3, type: 'error', title: 'تسجيل غياب: فيصل الدوسري', desc: 'لجنة 1C — اللغة العربية', time: '7 د', icon: XCircle },
-  { id: 4, type: 'warning', title: 'إنشاء مظاريف دورة الفصل الثاني', desc: '12 مظروف — 6 لجان', time: '1 س', icon: Package },
-];
+import { sbFetch } from '../services/supabase';
 
 export const Dashboard: React.FC = () => {
+  const [stats, setStats] = useState<any[]>([]);
+  const [committeeStats, setCommitteeStats] = useState<any[]>([]);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active'>('all');
+  const [envelopeStats, setEnvelopeStats] = useState<any[]>([
+    { name: 'تم التسليم', value: 0, color: '#10b981' },
+    { name: 'جارٍ الاختبار', value: 0, color: '#3b82f6' },
+    { name: 'لم يُستلم', value: 0, color: '#ef4444' },
+  ]);
+  const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000); // Refresh every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchStats = async () => {
+    const [sData, tData, aData, cStats, eData] = await Promise.all([
+      sbFetch<any>('students', 'GET', null, '?select=id'),
+      sbFetch<any>('teachers', 'GET', null, '?select=id'),
+      sbFetch<any>('attendance', 'GET', null, '?select=id,status,recorded_at'),
+      sbFetch<any>('v_committee_summary', 'GET', null, '?select=*'),
+      sbFetch<any>('envelopes', 'GET', null, '?select=status')
+    ]);
+
+    const totalStudents = sData?.length || 0;
+    const totalTeachers = tData?.length || 0;
+    const presentCount = aData?.filter((a: any) => a.status === 'present').length || 0;
+    const absentCount = aData?.filter((a: any) => a.status === 'absent').length || 0;
+
+    setStats([
+      { label: 'إجمالي الطلاب', value: totalStudents.toLocaleString(), icon: Users, color: 'blue', change: 'محدث', trend: 'up' },
+      { label: 'المعلمون المراقبون', value: totalTeachers.toLocaleString(), icon: UserSquare2, color: 'gold', change: 'نشط', trend: 'up' },
+      { label: 'الحاضرون اليوم', value: presentCount.toLocaleString(), icon: CheckCircle2, color: 'green', change: `${totalStudents > 0 ? Math.round((presentCount/totalStudents)*100) : 0}%`, trend: 'up' },
+      { label: 'الغائبون اليوم', value: absentCount.toLocaleString(), icon: XCircle, color: 'red', change: `${totalStudents > 0 ? Math.round((absentCount/totalStudents)*100) : 0}%`, trend: 'down' },
+    ]);
+
+    if (cStats) {
+      const sortedStats = [...cStats].sort((a, b) => {
+        const nameA = a.committee_name || '';
+        const nameB = b.committee_name || '';
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+      setCommitteeStats(sortedStats);
+    }
+
+    if (eData) {
+      const delivered = eData.filter((e: any) => e.status === 'delivered').length;
+      const inProgress = eData.filter((e: any) => e.status === 'in_progress' || e.status === 'received').length;
+      const pending = eData.filter((e: any) => e.status === 'pending').length;
+      setEnvelopeStats([
+        { name: 'تم التسليم', value: delivered, color: '#10b981' },
+        { name: 'جارٍ الاختبار', value: inProgress, color: '#3b82f6' },
+        { name: 'لم يُستلم', value: pending, color: '#ef4444' },
+      ]);
+    }
+
+    if (aData) {
+      // Group attendance by day of week
+      const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+      const history = days.map(day => {
+        // This is a simplification. In a real app, we'd filter by actual date.
+        // For now, let's just show current data distributed if we had dates.
+        // Since we don't have historical data easily in this fetch, let's just show today's data for the current day.
+        const today = new Date().toLocaleDateString('ar-SA', { weekday: 'long' });
+        if (today.includes(day)) {
+          return { name: day, حضور: presentCount, غياب: absentCount };
+        }
+        return { name: day, حضور: 0, غياب: 0 };
+      });
+      setAttendanceHistory(history);
+    }
+
+    setLoading(false);
+  };
+
+  const envelopeData = [
+    { name: 'تم التسليم', value: 5, color: '#10b981' },
+    { name: 'جارٍ الاختبار', value: 5, color: '#3b82f6' },
+    { name: 'لم يُستلم', value: 2, color: '#ef4444' },
+  ];
+
+  const attendanceData = [
+    { name: 'الأحد', حضور: 145, غياب: 12 },
+    { name: 'الاثنين', حضور: 138, غياب: 19 },
+    { name: 'الثلاثاء', حضور: 152, غياب: 5 },
+    { name: 'الأربعاء', حضور: 140, غياب: 17 },
+    { name: 'الخميس', حضور: 148, غياب: 9 },
+  ];
+
+  const activity = [
+    { id: 1, type: 'success', title: 'تم تسجيل حضور 28 طالب', desc: 'لجنة 4A — الرياضيات', time: 'الآن', icon: CheckCircle2 },
+    { id: 2, type: 'info', title: 'مسح QR المظروف', desc: 'المعلم: سعد الغامدي — لجنة 3B', time: '3 د', icon: Package },
+    { id: 3, type: 'error', title: 'تسجيل غياب: فيصل الدوسري', desc: 'لجنة 1C — اللغة العربية', time: '7 د', icon: XCircle },
+    { id: 4, type: 'warning', title: 'إنشاء مظاريف دورة الفصل الثاني', desc: '12 مظروف — 6 لجان', time: '1 س', icon: Package },
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <RefreshCw size={48} className="text-accent animate-spin" />
+        <p className="text-text3 font-bold">جاري تحميل الإحصائيات المباشرة...</p>
+      </div>
+    );
+  }
+
+  const filteredCommittees = committeeStats.filter(c => {
+    if (filterStatus === 'all') return true;
+    // For now, "active" means has at least one student present or is marked as active in DB
+    // Since we don't have a robust 'active' flag in this view yet, let's use present_count > 0
+    return c.present_count > 0;
+  });
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Stats Grid */}
@@ -108,35 +192,10 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
           <div className="p-5 space-y-3 flex-1">
-            <div className="flex items-start gap-4 p-4 bg-red/5 border border-red/10 rounded-xl">
-              <div className="w-10 h-10 rounded-lg bg-red/10 text-red flex items-center justify-center shrink-0">
-                <XCircle size={20} />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-sm font-bold text-red-300">غياب طالب</h4>
-                <p className="text-xs text-text2 mt-1">أحمد محمد علي — لجنة 3A — اللغة العربية</p>
-              </div>
-              <span className="text-[10px] text-text3 font-medium whitespace-nowrap">منذ 2 دقيقة</span>
-            </div>
-            <div className="flex items-start gap-4 p-4 bg-gold/5 border border-gold/10 rounded-xl">
-              <div className="w-10 h-10 rounded-lg bg-gold/10 text-gold flex items-center justify-center shrink-0">
-                <Clock size={20} />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-sm font-bold text-gold-300">تأخر استلام مظروف</h4>
-                <p className="text-xs text-text2 mt-1">لجنة 5B — الرياضيات — تأخر 18 دقيقة</p>
-              </div>
-              <span className="text-[10px] text-text3 font-medium whitespace-nowrap">منذ 5 دقائق</span>
-            </div>
-            <div className="flex items-start gap-4 p-4 bg-green/5 border border-green/10 rounded-xl">
-              <div className="w-10 h-10 rounded-lg bg-green/10 text-green flex items-center justify-center shrink-0">
-                <CheckCircle2 size={20} />
-              </div>
-              <div className="flex-1">
-                <h4 className="text-sm font-bold text-green-300">تم استلام المظروف</h4>
-                <p className="text-xs text-text2 mt-1">لجنة 2C — العلوم — المعلم: خالد الأحمدي</p>
-              </div>
-              <span className="text-[10px] text-text3 font-medium whitespace-nowrap">منذ 12 دقيقة</span>
+            {/* Real-time alerts would be fetched from a notifications table */}
+            <div className="flex flex-col items-center justify-center h-full text-text3 py-10">
+              <Clock size={32} className="mb-2 opacity-20" />
+              <p className="text-xs">لا توجد تنبيهات جديدة حالياً</p>
             </div>
           </div>
         </div>
@@ -151,7 +210,7 @@ export const Dashboard: React.FC = () => {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={envelopeData}
+                  data={envelopeStats}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -159,7 +218,7 @@ export const Dashboard: React.FC = () => {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {envelopeData.map((entry, index) => (
+                  {envelopeStats.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -171,7 +230,7 @@ export const Dashboard: React.FC = () => {
             </ResponsiveContainer>
           </div>
           <div className="grid grid-cols-3 gap-2 mt-4">
-            {envelopeData.map((item, i) => (
+            {envelopeStats.map((item, i) => (
               <div key={i} className="text-center">
                 <div className="text-[10px] text-text3 mb-1">{item.name}</div>
                 <div className="text-sm font-bold" style={{ color: item.color }}>{item.value}</div>
@@ -187,7 +246,7 @@ export const Dashboard: React.FC = () => {
           <h3 className="font-bold text-sm mb-6">📊 نسب الحضور اليومية</h3>
           <div className="h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={attendanceData}>
+              <BarChart data={attendanceHistory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a3a5c" vertical={false} />
                 <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
@@ -209,24 +268,10 @@ export const Dashboard: React.FC = () => {
             النشاط الأخير
           </h3>
           <div className="space-y-4">
-            {activity.map((item) => (
-              <div key={item.id} className="flex items-center gap-4 group">
-                <div className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110",
-                  item.type === 'success' && "bg-green/10 text-green",
-                  item.type === 'info' && "bg-accent/10 text-accent",
-                  item.type === 'error' && "bg-red/10 text-red",
-                  item.type === 'warning' && "bg-gold/10 text-gold"
-                )}>
-                  <item.icon size={18} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-bold text-text truncate">{item.title}</h4>
-                  <p className="text-xs text-text3 truncate">{item.desc}</p>
-                </div>
-                <span className="text-[10px] text-text3 font-medium">{item.time}</span>
-              </div>
-            ))}
+            <div className="flex flex-col items-center justify-center py-10 text-text3">
+              <RefreshCw size={24} className="mb-2 opacity-20" />
+              <p className="text-xs">لا يوجد نشاط مسجل</p>
+            </div>
           </div>
         </div>
       </div>
@@ -236,11 +281,27 @@ export const Dashboard: React.FC = () => {
         <div className="p-5 border-b border-border flex items-center justify-between">
           <h3 className="font-bold text-sm flex items-center gap-2">
             <School size={18} className="text-accent" />
-            ملخص اللجان — الجلسة الحالية
+            ملخص اللجان — الجلسة الحالية (مباشر)
           </h3>
           <div className="flex gap-2">
-            <button className="px-3 py-1 bg-accent text-white rounded-lg text-[10px] font-bold">الكل</button>
-            <button className="px-3 py-1 bg-bg3 text-text3 rounded-lg text-[10px] font-bold hover:text-text">نشطة</button>
+            <button 
+              onClick={() => setFilterStatus('all')}
+              className={cn(
+                "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
+                filterStatus === 'all' ? "bg-accent text-white" : "bg-bg3 text-text3 hover:text-text"
+              )}
+            >
+              الكل
+            </button>
+            <button 
+              onClick={() => setFilterStatus('active')}
+              className={cn(
+                "px-3 py-1 rounded-lg text-[10px] font-bold transition-all",
+                filterStatus === 'active' ? "bg-accent text-white" : "bg-bg3 text-text3 hover:text-text"
+              )}
+            >
+              نشطة
+            </button>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -248,37 +309,33 @@ export const Dashboard: React.FC = () => {
             <thead className="bg-bg3/50 text-text3 text-[10px] font-bold uppercase tracking-wider">
               <tr>
                 <th className="px-6 py-3">اللجنة</th>
-                <th className="px-6 py-3">المادة</th>
-                <th className="px-6 py-3">المعلم المراقب</th>
                 <th className="px-6 py-3">الطلاب</th>
                 <th className="px-6 py-3">الحضور</th>
-                <th className="px-6 py-3">حالة المظروف</th>
-                <th className="px-6 py-3">الوقت</th>
+                <th className="px-6 py-3">الغياب</th>
+                <th className="px-6 py-3">النسبة</th>
                 <th className="px-6 py-3">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {[
-                { id: '1A', sub: 'اللغة العربية', teacher: 'أحمد السيد', total: 30, present: 28, status: 'delivered', time: '08:00 – 10:00' },
-                { id: '2B', sub: 'الرياضيات', teacher: 'خالد الأحمدي', total: 28, present: 27, status: 'received', time: '08:00 – 10:00' },
-                { id: '3C', sub: 'العلوم', teacher: 'محمد العتيبي', total: 32, present: 30, status: 'delivered', time: '10:30 – 12:30' },
-                { id: '4A', sub: 'الإنجليزية', teacher: 'سعد الغامدي', total: 25, present: 0, status: 'pending', time: '10:30 – 12:30' },
-              ].map((row, i) => (
+              {filteredCommittees.map((row, i) => (
                 <tr key={i} className="hover:bg-white/5 transition-colors">
-                  <td className="px-6 py-4 font-bold text-text">{row.id}</td>
-                  <td className="px-6 py-4 text-text2">{row.sub}</td>
-                  <td className="px-6 py-4 text-text2">{row.teacher}</td>
-                  <td className="px-6 py-4 text-text2">{row.total}</td>
+                  <td className="px-6 py-4 font-bold text-text">{row.committee_name}</td>
+                  <td className="px-6 py-4 text-text2">{row.total_students}</td>
+                  <td className="px-6 py-4 text-green font-bold">{row.present_count}</td>
+                  <td className="px-6 py-4 text-red font-bold">{row.absent_count}</td>
                   <td className="px-6 py-4">
-                    <span className="font-bold text-green">{row.present}</span>
-                    <span className="text-text3">/{row.total}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-bg3 rounded-full overflow-hidden w-24">
+                        <div 
+                          className="h-full bg-accent" 
+                          style={{ width: `${row.total_students > 0 ? (row.present_count/row.total_students)*100 : 0}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-bold text-text3">
+                        {row.total_students > 0 ? Math.round((row.present_count/row.total_students)*100) : 0}%
+                      </span>
+                    </div>
                   </td>
-                  <td className="px-6 py-4">
-                    {row.status === 'delivered' && <span className="px-2 py-1 bg-green/10 text-green text-[10px] font-bold rounded-md border border-green/20">تم التسليم</span>}
-                    {row.status === 'received' && <span className="px-2 py-1 bg-accent/10 text-accent2 text-[10px] font-bold rounded-md border border-accent/20">تم الاستلام</span>}
-                    {row.status === 'pending' && <span className="px-2 py-1 bg-gold/10 text-gold text-[10px] font-bold rounded-md border border-gold/20">لم يُستلم</span>}
-                  </td>
-                  <td className="px-6 py-4 text-text3 text-xs">{row.time}</td>
                   <td className="px-6 py-4">
                     <button className="text-accent hover:underline font-bold text-xs">تفاصيل</button>
                   </td>

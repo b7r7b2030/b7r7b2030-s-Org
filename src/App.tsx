@@ -16,6 +16,7 @@ import { Reports } from './pages/Reports';
 import { Analytics } from './pages/Analytics';
 import { Setup } from './pages/Setup';
 import { ExamSchedulePage } from './pages/ExamSchedule';
+import { TeacherAssignment } from './pages/TeacherAssignment';
 import { 
   Users, 
   UserSquare2, 
@@ -37,11 +38,22 @@ export default function App() {
   // Listen for custom navigation events
   useEffect(() => {
     const handleNavigate = (e: any) => {
-      if (e.detail) setActivePage(e.detail);
+      const page = e.detail;
+      if (!page) return;
+
+      // Counselor restrictions
+      if (userRole === UserRole.COUNSELOR) {
+        if (!['dashboard', 'students', 'reports', 'analytics', 'attendance'].includes(page)) {
+          setActivePage('dashboard');
+          return;
+        }
+      }
+
+      setActivePage(page);
     };
     window.addEventListener('navigate', handleNavigate);
     return () => window.removeEventListener('navigate', handleNavigate);
-  }, []);
+  }, [userRole]);
 
   // If no role is selected, show role selector
   if (!userRole) {
@@ -62,6 +74,7 @@ export default function App() {
     analytics: { title: 'التحليلات المتقدمة', subtitle: 'رؤى ذكية لتحسين العملية التعليمية' },
     setup: { title: 'إعداد النظام', subtitle: 'إعداد قاعدة البيانات السحابية وإنشاء الجداول' },
     examschedule: { title: 'جدول الاختبارات', subtitle: 'إعداد وتوزيع المواد على الأيام والفترات' },
+    teacherassignment: { title: 'توزيع المعلمين', subtitle: 'توزيع المراقبين على اللجان لكل يوم وفترة' },
   };
 
   const renderPage = () => {
@@ -77,13 +90,14 @@ export default function App() {
       case 'committees': return <Committees />;
       case 'envelopes': return <Envelopes />;
       case 'attendance': 
-        return userRole === UserRole.TEACHER ? <TeacherDashboard /> : <Attendance />;
+        return userRole === UserRole.TEACHER ? <TeacherDashboard /> : <Attendance userRole={userRole} />;
       case 'qrcodes': return <QRCodes />;
       case 'alerts': return <Alerts />;
       case 'reports': return <Reports />;
       case 'analytics': return <Analytics />;
       case 'setup': return <Setup />;
       case 'examschedule': return <ExamSchedulePage />;
+      case 'teacherassignment': return <TeacherAssignment />;
       default: return <Dashboard />;
     }
   };
