@@ -201,7 +201,6 @@ export const ExamSchedulePage: React.FC = () => {
               margin: 0 auto;
               box-sizing: border-box;
               position: relative;
-              page-break-after: always;
             }
             /* Hide browser headers/footers */
             header, footer, .no-print { display: none !important; }
@@ -262,53 +261,59 @@ export const ExamSchedulePage: React.FC = () => {
             <p className="text-lg font-bold mt-2">جدول الاختبارات التحريرية</p>
           </div>
 
-          <table className="w-full border-collapse border-2 border-black text-center">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border-2 border-black p-2 w-20" rowSpan={2}>اليوم</th>
-                <th className="border-2 border-black p-2 w-24" rowSpan={2}>التاريخ</th>
-                <th className="border-2 border-black p-2 w-12" rowSpan={2}>الفترة</th>
-                {GRADES.map(grade => (
-                  <th key={grade} className="border-2 border-black p-2" colSpan={2}>{grade}</th>
-                ))}
-              </tr>
-              <tr className="bg-gray-100">
-                {GRADES.map(grade => (
-                  <React.Fragment key={grade}>
-                    <th className="border-2 border-black p-1">المادة</th>
-                    <th className="border-2 border-black p-1">الزمن</th>
-                  </React.Fragment>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sortedDates.map(date => {
-                const day = groupedByDate[date];
-                const maxPeriods = Math.max(...GRADES.map(g => day.grades[g]?.length || 0));
-                
-                return Array.from({ length: maxPeriods }).map((_, pIdx) => (
-                  <tr key={`${date}-${pIdx}`}>
-                    {pIdx === 0 && (
-                      <>
-                        <td className="border-2 border-black p-2 font-bold" rowSpan={maxPeriods}>{day.dayName}</td>
-                        <td className="border-2 border-black p-2 font-mono" rowSpan={maxPeriods}>{date}</td>
-                      </>
-                    )}
-                    <td className="border-2 border-black p-1 font-bold">{pIdx === 0 ? 'الأولى' : 'الثانية'}</td>
-                    {GRADES.map(grade => {
-                      const slot = day.grades[grade]?.[pIdx];
-                      return (
-                        <React.Fragment key={grade}>
-                          <td className="border-2 border-black p-1 font-bold h-10">{slot?.subject || '------'}</td>
-                          <td className="border-2 border-black p-1">{slot?.duration || '-----'}</td>
-                        </React.Fragment>
-                      );
-                    })}
-                  </tr>
-                ));
-              })}
-            </tbody>
-          </table>
+          {sortedDates.length === 0 ? (
+            <div className="p-20 text-center border-2 border-dashed border-gray-300 rounded-2xl">
+              <p className="text-gray-500 font-bold">لا يوجد بيانات في الجدول حالياً</p>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border-2 border-black text-center">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border-2 border-black p-2 w-20" rowSpan={2}>اليوم</th>
+                  <th className="border-2 border-black p-2 w-24" rowSpan={2}>التاريخ</th>
+                  <th className="border-2 border-black p-2 w-12" rowSpan={2}>الفترة</th>
+                  {GRADES.map(grade => (
+                    <th key={grade} className="border-2 border-black p-2" colSpan={2}>{grade}</th>
+                  ))}
+                </tr>
+                <tr className="bg-gray-100">
+                  {GRADES.map(grade => (
+                    <React.Fragment key={grade}>
+                      <th className="border-2 border-black p-1">المادة</th>
+                      <th className="border-2 border-black p-1">الزمن</th>
+                    </React.Fragment>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedDates.map(date => {
+                  const day = groupedByDate[date];
+                  const maxPeriods = Math.max(...GRADES.map(g => day.grades[g]?.length || 0));
+                  
+                  return Array.from({ length: maxPeriods }).map((_, pIdx) => (
+                    <tr key={`${date}-${pIdx}`}>
+                      {pIdx === 0 && (
+                        <>
+                          <td className="border-2 border-black p-2 font-bold" rowSpan={maxPeriods}>{day.dayName}</td>
+                          <td className="border-2 border-black p-2 font-mono" rowSpan={maxPeriods}>{date}</td>
+                        </>
+                      )}
+                      <td className="border-2 border-black p-1 font-bold">{pIdx === 0 ? 'الأولى' : 'الثانية'}</td>
+                      {GRADES.map(grade => {
+                        const slot = day.grades[grade]?.[pIdx];
+                        return (
+                          <React.Fragment key={grade}>
+                            <td className="border-2 border-black p-1 font-bold h-10">{slot?.subject || '------'}</td>
+                            <td className="border-2 border-black p-1">{slot?.duration || '-----'}</td>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tr>
+                  ));
+                })}
+              </tbody>
+            </table>
+          )}
 
           {/* Instructions */}
           <div className="mt-8 text-right space-y-2 instructions">

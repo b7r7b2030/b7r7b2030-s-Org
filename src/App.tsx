@@ -114,35 +114,39 @@ export default function App() {
   return (
     <div className="min-h-screen bg-bg text-text selection:bg-accent/30" dir="rtl">
       {/* Background Glows */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 print:hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-accent/5 blur-[120px] rounded-full"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple/5 blur-[120px] rounded-full"></div>
         <div className="absolute top-[40%] left-[40%] w-[20%] h-[20%] bg-gold/5 blur-[100px] rounded-full"></div>
       </div>
 
-      <Sidebar 
-        activePage={activePage} 
-        setActivePage={setActivePage} 
-        alertCount={alertCount} 
-        userRole={userRole}
-        onLogout={() => setUserRole(null)}
-      />
-
-      <main className="lg:mr-64 min-h-screen flex flex-col relative z-10 pb-20 lg:pb-0">
-        <Topbar 
-          title={pageInfo[activePage]?.title || activePage}
-          subtitle={pageInfo[activePage]?.subtitle || ''}
-          onAddClick={() => setIsAddModalOpen(true)}
-          onAlertsClick={() => setActivePage('alerts')}
-          alertCount={alertCount}
-          showAddButton={filteredAddOptions.length > 0}
+      <div className="print:hidden">
+        <Sidebar 
+          activePage={activePage} 
+          setActivePage={setActivePage} 
+          alertCount={alertCount} 
+          userRole={userRole}
+          onLogout={() => setUserRole(null)}
         />
+      </div>
 
-        <div className="flex-1 p-8 max-w-7xl mx-auto w-full">
+      <main className="lg:mr-64 min-h-screen flex flex-col relative z-10 pb-20 lg:pb-0 print:mr-0 print:pb-0">
+        <div className="print:hidden">
+          <Topbar 
+            title={pageInfo[activePage]?.title || activePage}
+            subtitle={pageInfo[activePage]?.subtitle || ''}
+            onAddClick={() => setIsAddModalOpen(true)}
+            onAlertsClick={() => setActivePage('alerts')}
+            alertCount={alertCount}
+            showAddButton={filteredAddOptions.length > 0}
+          />
+        </div>
+
+        <div className="flex-1 p-8 max-w-7xl mx-auto w-full print:p-0 print:max-w-none">
           {renderPage()}
         </div>
 
-        <footer className="p-8 border-t border-border text-center">
+        <footer className="p-8 border-t border-border text-center print:hidden">
           <p className="text-xs text-text3 font-medium">
             © {new Date().getFullYear()} نظام إدارة الاختبارات الذكي — جميع الحقوق محفوظة
           </p>

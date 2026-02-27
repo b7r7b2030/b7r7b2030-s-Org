@@ -204,7 +204,6 @@ export const TeacherAssignment: React.FC = () => {
               margin: 0 auto;
               box-sizing: border-box;
               position: relative;
-              page-break-after: always;
             }
             /* Hide browser headers/footers */
             header, footer, .no-print { display: none !important; }
@@ -269,30 +268,36 @@ export const TeacherAssignment: React.FC = () => {
             الفترة {selectedPeriod === 1 ? 'الأولى' : selectedPeriod === 2 ? 'الثانية' : 'الثالثة'}
           </div>
 
-          <table className="w-full border-collapse border-2 border-black text-center">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border-2 border-black p-2 w-12">#</th>
-                <th className="border-2 border-black p-2">اسم المعلم</th>
-                <th className="border-2 border-black p-2 w-20">اللجنة</th>
-                <th className="border-2 border-black p-2">مقر اللجنة</th>
-                <th className="border-2 border-black p-2 w-32">التوقيع</th>
-                <th className="border-2 border-black p-2">مواد الاختبار</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reportData.map((row, idx) => (
-                <tr key={idx}>
-                  <td className="border border-black p-2 text-center">{idx + 1}</td>
-                  <td className="border border-black p-2 font-bold">{row.teacherName}</td>
-                  <td className="border border-black p-2 text-center font-black">{row.committeeName}</td>
-                  <td className="border border-black p-2 text-center">{row.location}</td>
-                  <td className="border border-black p-2 h-10"></td>
-                  <td className="border border-black p-2 text-xs">{row.subjects}</td>
+          {reportData.length === 0 ? (
+            <div className="p-20 text-center border-2 border-dashed border-gray-300 rounded-2xl">
+              <p className="text-gray-500 font-bold">لا يوجد معلمين مكلفين لهذه الفترة حالياً</p>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border-2 border-black text-center">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border-2 border-black p-2 w-12">#</th>
+                  <th className="border-2 border-black p-2">اسم المعلم</th>
+                  <th className="border-2 border-black p-2 w-20">اللجنة</th>
+                  <th className="border-2 border-black p-2">مقر اللجنة</th>
+                  <th className="border-2 border-black p-2 w-32">التوقيع</th>
+                  <th className="border-2 border-black p-2">مواد الاختبار</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {reportData.map((row, idx) => (
+                  <tr key={idx}>
+                    <td className="border border-black p-2 text-center">{idx + 1}</td>
+                    <td className="border border-black p-2 font-bold">{row.teacherName}</td>
+                    <td className="border border-black p-2 text-center font-black">{row.committeeName}</td>
+                    <td className="border border-black p-2 text-center">{row.location}</td>
+                    <td className="border border-black p-2 h-10"></td>
+                    <td className="border border-black p-2 text-xs">{row.subjects}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
 
           <div className="mt-12 flex justify-between px-12">
             <div className="text-center">
