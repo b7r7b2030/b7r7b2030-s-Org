@@ -45,11 +45,17 @@ export const Committees: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     const [cData, sData] = await Promise.all([
-      sbFetch<Committee>('committees', 'GET', null, '?select=*&order=name'),
+      sbFetch<Committee>('committees', 'GET', null, '?select=*'),
       sbFetch<Student>('students', 'GET', null, '?select=*')
     ]);
     
-    if (cData) setCommittees(cData);
+    if (cData) {
+      // Sort committees numerically
+      const sorted = [...cData].sort((a, b) => 
+        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+      );
+      setCommittees(sorted);
+    }
     if (sData) setStudents(sData);
     setLoading(false);
   };
@@ -119,17 +125,17 @@ export const Committees: React.FC = () => {
     const committeesToPrint = selectedCommittee ? [selectedCommittee] : committees;
 
     return (
-      <div className="bg-white min-h-screen p-0 m-0 text-black print:p-0 font-sans" dir="rtl">
-        <div className="fixed top-4 right-4 flex gap-2 print:hidden z-50">
+      <div className="bg-white min-h-screen p-0 m-0 text-black print:p-0 font-sans relative z-[9999]" dir="rtl">
+        <div className="fixed top-4 right-4 flex gap-2 print:hidden z-[10000]">
           <button 
             onClick={() => setPrintMode('none')}
-            className="bg-red text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg"
+            className="bg-red text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-2xl border-2 border-white"
           >
             <ArrowRight size={18} /> إغلاق المعاينة
           </button>
           <button 
             onClick={handlePrint}
-            className="bg-accent text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg"
+            className="bg-accent text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2 shadow-2xl border-2 border-white"
           >
             <Printer size={18} /> طباعة الآن
           </button>
@@ -139,7 +145,7 @@ export const Committees: React.FC = () => {
           {committeesToPrint.map((c, idx) => {
             const counts = getGradeCounts(c.name);
             return (
-              <div key={idx} className="page-break-after-always border-[12px] border-double border-black p-8 h-[1050px] flex flex-col items-center justify-between text-center relative overflow-hidden bg-white">
+              <div key={idx} className="page-break-after-always border-[12px] border-double border-black p-8 h-[1050px] flex flex-col items-center justify-between text-center relative overflow-hidden bg-white mx-auto my-0 box-border">
                 {/* Header Section */}
                 <div className="w-full flex justify-between items-center mb-2 border-b-2 border-black pb-4">
                   <div className="text-right space-y-0.5">
@@ -159,8 +165,8 @@ export const Committees: React.FC = () => {
                 </div>
 
                 {/* Main Content */}
-                <div className="flex-1 flex flex-col items-center justify-center space-y-8 w-full">
-                  <div className="space-y-2">
+                <div className="flex-1 flex flex-col items-center justify-center space-y-6 w-full py-4">
+                  <div className="space-y-1">
                     <h1 className="text-5xl font-black tracking-widest">لجنة</h1>
                     <div className="bg-black text-white py-4 px-12 rounded-[30px] inline-block shadow-xl">
                       <span className="text-[100px] font-black leading-none">{c.name}</span>
@@ -174,7 +180,7 @@ export const Committees: React.FC = () => {
                   </div>
                   
                   {/* Grade Counts Section */}
-                  <div className="w-full max-w-2xl grid grid-cols-3 gap-4 mt-6">
+                  <div className="w-full max-w-2xl grid grid-cols-3 gap-4 mt-4">
                     <div className="border-2 border-black p-4 rounded-[24px] bg-gray-50 flex flex-col items-center justify-center">
                       <p className="text-lg font-bold mb-2 border-b border-black pb-1 w-full">أول ثانوي</p>
                       <p className="text-5xl font-black">{counts.first}</p>
@@ -190,10 +196,10 @@ export const Committees: React.FC = () => {
                   </div>
 
                   {/* QR Code Section */}
-                  <div className="mt-4 p-6 border-2 border-black rounded-[30px] bg-white flex flex-col items-center gap-2 shadow-lg">
+                  <div className="mt-2 p-6 border-2 border-black rounded-[30px] bg-white flex flex-col items-center gap-2 shadow-lg">
                     <QRCodeSVG 
                       value={JSON.stringify({ type: 'committee', id: c.id, name: c.name })} 
-                      size={200}
+                      size={180}
                       level="H"
                       includeMargin={true}
                     />
@@ -201,18 +207,9 @@ export const Committees: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Footer */}
-                <div className="w-full mt-4 pt-4 border-t-2 border-black flex justify-between items-end">
-                  <div className="text-right">
-                    <p className="font-bold text-base">المعلم المراقب:</p>
-                    <p className="text-xl font-black mt-2 border-b border-dotted border-black w-48 pb-1">
-                      {c.teacher_name || ''}
-                    </p>
-                  </div>
-                  <div className="text-left">
-                    <p className="font-bold text-base">مدير المدرسة:</p>
-                    <p className="text-lg font-black mt-2">................................</p>
-                  </div>
+                {/* Footer - Simplified as requested (removed signatures) */}
+                <div className="w-full mt-4 pt-4 border-t-2 border-black flex justify-center items-center">
+                  <p className="text-xs text-gray-400">© {new Date().getFullYear()} نظام إدارة الاختبارات الذكي</p>
                 </div>
 
                 {/* Background Decoration */}
@@ -231,8 +228,24 @@ export const Committees: React.FC = () => {
         
         <style dangerouslySetInnerHTML={{ __html: `
           @media print {
-            body { background: white !important; }
-            .page-break-after-always { page-break-after: always; }
+            @page {
+              size: A4;
+              margin: 0;
+            }
+            body { 
+              background: white !important; 
+              color: black !important;
+            }
+            .page-break-after-always { 
+              page-break-after: always; 
+              border: none !important;
+              height: 100vh !important;
+              width: 100vw !important;
+              padding: 2cm !important;
+            }
+            header, footer, .print-hidden, nav, aside, .fixed {
+              display: none !important;
+            }
           }
         `}} />
       </div>

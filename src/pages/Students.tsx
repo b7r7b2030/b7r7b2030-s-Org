@@ -153,6 +153,15 @@ export const Students: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
+  const handleClearAll = async () => {
+    if (!confirm('⚠️ تحذير: سيتم مسح جميع الطلاب من قاعدة البيانات. هل أنت متأكد؟')) return;
+    const res = await sbFetch('students', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+    if (res) {
+      alert('تم مسح جميع الطلاب بنجاح');
+      fetchStudents();
+    }
+  };
+
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.full_name.includes(search) || s.student_no.includes(search);
     
@@ -323,7 +332,15 @@ export const Students: React.FC = () => {
       {/* Students Table */}
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <div className="p-5 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h3 className="font-bold text-sm">قائمة الطلاب</h3>
+          <div className="flex items-center gap-4">
+            <h3 className="font-bold text-sm">قائمة الطلاب</h3>
+            <button 
+              onClick={handleClearAll}
+              className="px-3 py-1 bg-red/10 text-red border border-red/20 rounded-lg text-[10px] font-bold hover:bg-red hover:text-white transition-all flex items-center gap-1"
+            >
+              <Trash2 size={12} /> مسح الكل
+            </button>
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex bg-bg3 p-1 rounded-xl border border-border">
               {grades.map(f => (

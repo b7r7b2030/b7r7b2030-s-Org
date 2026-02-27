@@ -67,8 +67,10 @@ CREATE TABLE IF NOT EXISTS teacher_assignments (
     committee_id  UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
     exam_date     DATE        NOT NULL,
     period        INTEGER     NOT NULL,
+    slot          INTEGER     DEFAULT 1,
     created_at    TIMESTAMPTZ DEFAULT now(),
-    UNIQUE (teacher_id, exam_date, period)
+    UNIQUE (teacher_id, exam_date, period),
+    UNIQUE (committee_id, exam_date, period, slot)
 );
 
 CREATE TABLE IF NOT EXISTS envelopes (
@@ -97,17 +99,22 @@ CREATE TABLE IF NOT EXISTS attendance (
 );
 
 CREATE TABLE IF NOT EXISTS exam_schedules (
-    id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
-    exam_date   DATE        NOT NULL,
-    day_name    TEXT        NOT NULL,
-    grade       TEXT        NOT NULL,
-    period      INTEGER     NOT NULL,
-    subject     TEXT        NOT NULL,
-    start_time  TIME        NOT NULL,
-    end_time    TIME        NOT NULL,
-    duration    TEXT,
-    created_at  TIMESTAMPTZ DEFAULT now(),
-    updated_at  TIMESTAMPTZ DEFAULT now()
+    id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    exam_date     DATE        NOT NULL,
+    day_name      TEXT        NOT NULL,
+    grade         TEXT        NOT NULL,
+    period        INTEGER     NOT NULL,
+    subject       TEXT        NOT NULL,
+    start_time    TIME        NOT NULL,
+    end_time      TIME        NOT NULL,
+    duration      TEXT,
+    semester      TEXT        DEFAULT 'الفصل الدراسي الأول',
+    academic_year TEXT        DEFAULT '١٤٤٧ هـ',
+    vice_principal TEXT       DEFAULT 'أ. محمد القرني',
+    counselor     TEXT        DEFAULT 'أ. ماجد السفري / أ. هزاع الشمراني',
+    principal     TEXT        DEFAULT 'أ. نايف بن أحمد الشهري',
+    created_at    TIMESTAMPTZ DEFAULT now(),
+    updated_at    TIMESTAMPTZ DEFAULT now()
 );
 
 -- 2. التقارير الذكية (Views)

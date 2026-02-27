@@ -24,6 +24,11 @@ export const ExamSchedulePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [printMode, setPrintMode] = useState(false);
+  const [semester, setSemester] = useState('الفصل الدراسي الأول');
+  const [academicYear, setAcademicYear] = useState('١٤٤٧ هـ');
+  const [vicePrincipal, setVicePrincipal] = useState('أ. محمد القرني');
+  const [counselor, setCounselor] = useState('أ. ماجد السفري / أ. هزاع الشمراني');
+  const [principal, setPrincipal] = useState('أ. نايف بن أحمد الشهري');
 
   useEffect(() => {
     fetchSchedules();
@@ -39,6 +44,13 @@ export const ExamSchedulePage: React.FC = () => {
         exam_date: s.exam_date.split('T')[0]
       }));
       setSchedules(sanitized);
+      if (data.length > 0) {
+        if (data[0].semester) setSemester(data[0].semester);
+        if (data[0].academic_year) setAcademicYear(data[0].academic_year);
+        if (data[0].vice_principal) setVicePrincipal(data[0].vice_principal);
+        if (data[0].counselor) setCounselor(data[0].counselor);
+        if (data[0].principal) setPrincipal(data[0].principal);
+      }
     }
     setLoading(false);
   };
@@ -58,7 +70,12 @@ export const ExamSchedulePage: React.FC = () => {
       subject: '',
       start_time: '07:30',
       end_time: '09:30',
-      duration: 'ساعتان'
+      duration: 'ساعتان',
+      semester,
+      academic_year: academicYear,
+      vice_principal: vicePrincipal,
+      counselor,
+      principal
     }));
     
     setSchedules([...schedules, ...newRows]);
@@ -77,7 +94,12 @@ export const ExamSchedulePage: React.FC = () => {
       subject: '',
       start_time: nextPeriod === 1 ? '07:30' : '10:00',
       end_time: nextPeriod === 1 ? '09:30' : '12:00',
-      duration: 'ساعتان'
+      duration: 'ساعتان',
+      semester,
+      academic_year: academicYear,
+      vice_principal: vicePrincipal,
+      counselor,
+      principal
     };
 
     setSchedules([...schedules, newRow]);
@@ -120,7 +142,14 @@ export const ExamSchedulePage: React.FC = () => {
       await sbFetch('exam_schedules', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
       
       if (schedules.length > 0) {
-        const toSave = schedules.map(({ id, ...rest }) => rest);
+        const toSave = schedules.map(({ id, ...rest }) => ({
+          ...rest,
+          semester,
+          academic_year: academicYear,
+          vice_principal: vicePrincipal,
+          counselor,
+          principal
+        }));
         const res = await sbFetch('exam_schedules', 'POST', toSave);
         
         if (res) {
@@ -187,7 +216,7 @@ export const ExamSchedulePage: React.FC = () => {
           </div>
 
           <div className="text-center mb-6">
-            <h1 className="text-xl font-black underline decoration-double underline-offset-4">جدول الاختبارات النهائية للفصل الدراسي الأول لعام 1447 هـ</h1>
+            <h1 className="text-xl font-black underline decoration-double underline-offset-4">جدول الاختبارات النهائية لـ{semester} لعام {academicYear}</h1>
             <p className="text-lg font-bold mt-2">جدول الاختبارات التحريرية</p>
           </div>
 
@@ -254,16 +283,15 @@ export const ExamSchedulePage: React.FC = () => {
           <div className="mt-12 grid grid-cols-3 text-center text-xs font-bold">
             <div className="space-y-8">
               <p>وكيل شؤون الطلاب</p>
-              <p>أ. محمد القرني</p>
+              <p>{vicePrincipal}</p>
             </div>
             <div className="space-y-4">
               <p>المرشد الطلابي :</p>
-              <p>أ. ماجد السفري</p>
-              <p>أ. هزاع الشمراني</p>
+              <p>{counselor}</p>
             </div>
             <div className="space-y-8">
               <p>مدير المدرسة :</p>
-              <p>أ. نايف بن أحمد الشهري</p>
+              <p>{principal}</p>
             </div>
           </div>
         </div>
@@ -274,12 +302,61 @@ export const ExamSchedulePage: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
+        <div className="flex-1">
           <h2 className="text-2xl font-display font-black flex items-center gap-3">
             <Calendar className="text-purple" />
             معالج جدول الاختبارات
           </h2>
-          <p className="text-text3 text-sm mt-1">قم بإعداد وتوزيع المواد على الأيام والفترات لكل مرحلة</p>
+          <div className="flex flex-wrap gap-4 mt-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-text3 uppercase px-1">الفصل الدراسي</label>
+              <select 
+                value={semester}
+                onChange={(e) => setSemester(e.target.value)}
+                className="bg-bg3 border border-border rounded-xl px-4 py-1.5 text-xs outline-none focus:border-purple"
+              >
+                <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
+                <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
+                <option value="الفصل الدراسي الثالث">الفصل الدراسي الثالث</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-text3 uppercase px-1">العام الدراسي</label>
+              <input 
+                value={academicYear}
+                onChange={(e) => setAcademicYear(e.target.value)}
+                placeholder="١٤٤٧ هـ"
+                className="bg-bg3 border border-border rounded-xl px-4 py-1.5 text-xs outline-none focus:border-purple w-32"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-4 mt-3 pt-3 border-t border-border/30">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-text3 uppercase px-1">وكيل شؤون الطلاب</label>
+              <input 
+                value={vicePrincipal}
+                onChange={(e) => setVicePrincipal(e.target.value)}
+                className="bg-bg3 border border-border rounded-xl px-4 py-1.5 text-xs outline-none focus:border-purple w-48"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-text3 uppercase px-1">المرشد الطلابي</label>
+              <input 
+                value={counselor}
+                onChange={(e) => setCounselor(e.target.value)}
+                className="bg-bg3 border border-border rounded-xl px-4 py-1.5 text-xs outline-none focus:border-purple w-64"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-text3 uppercase px-1">مدير المدرسة</label>
+              <input 
+                value={principal}
+                onChange={(e) => setPrincipal(e.target.value)}
+                className="bg-bg3 border border-border rounded-xl px-4 py-1.5 text-xs outline-none focus:border-purple w-48"
+              />
+            </div>
+          </div>
         </div>
         <div className="flex gap-3">
           <button 

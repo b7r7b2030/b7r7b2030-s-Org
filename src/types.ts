@@ -21,6 +21,11 @@ export interface ExamSchedule {
   start_time: string;
   end_time: string;
   duration: string;
+  semester?: string;
+  academic_year?: string;
+  vice_principal?: string;
+  counselor?: string;
+  principal?: string;
 }
 
 export interface Student {
@@ -68,6 +73,7 @@ export interface TeacherAssignment {
   committee_name?: string;
   exam_date: string;
   period: number;
+  slot?: number;
   created_at?: string;
 }
 

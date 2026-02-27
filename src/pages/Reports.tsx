@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, 
   Download, 
@@ -8,9 +8,11 @@ import {
   UserSquare2, 
   Calendar,
   Search,
-  Filter
+  Filter,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { sbFetch } from '../services/supabase';
 
 const reportTypes = [
   { id: 'attendance', label: 'تقرير الحضور والغياب', icon: CheckCircle2, color: 'green', desc: 'عرض شامل لجميع سجلات الحضور مع إمكانية التصفية' },
@@ -19,6 +21,23 @@ const reportTypes = [
 ];
 
 export const Reports: React.FC = () => {
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+  useEffect(() => {
+    fetchAttendance();
+  }, [selectedDate]);
+
+  const fetchAttendance = async () => {
+    setLoading(true);
+    // In a real app, we'd filter by date in the query
+    const data = await sbFetch<any>('attendance', 'GET', null, '?select=*,students(full_name,student_no,grade,classroom),committees(name),teachers(full_name)');
+    if (data) {
+      setAttendance(data);
+    }
+    setLoading(false);
+  };
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -56,7 +75,12 @@ export const Reports: React.FC = () => {
             📋 تقرير الحضور والغياب — اليوم
           </h3>
           <div className="flex flex-wrap items-center gap-3">
-            <input type="date" className="bg-bg3 border border-border rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-accent" defaultValue={new Date().toISOString().split('T')[0]} />
+            <input 
+              type="date" 
+              className="bg-bg3 border border-border rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-accent" 
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
             <button className="px-4 py-2 bg-green text-white text-[10px] font-bold rounded-xl hover:bg-green/90 transition-all flex items-center gap-2">
               <Download size={14} /> تصدير Excel
             </button>
@@ -80,17 +104,20 @@ export const Reports: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {[
-                { id: '20241003', name: 'أحمد محمد علي', class: 'الرابع A', sub: 'اللغة العربية', comm: '3A', status: 'absent', time: '08:07 ص', teacher: 'سعد الغامدي' },
-                { id: '20241018', name: 'فيصل القحطاني', class: 'الرابع A', sub: 'الرياضيات', comm: '1C', status: 'absent', time: '08:10 ص', teacher: 'محمد العتيبي' },
-                { id: '20241025', name: 'خالد سعد الدوسري', class: 'الرابع A', sub: 'اللغة العربية', comm: '3A', status: 'present', time: '08:02 ص', teacher: 'سعد الغامدي' },
-              ].map((row, i) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="p-10 text-center">
+                    <RefreshCw className="mx-auto animate-spin text-accent mb-2" size={32} />
+                    <p className="text-xs text-text3">جاري تحميل التقرير...</p>
+                  </td>
+                </tr>
+              ) : attendance.length > 0 ? attendance.map((row, i) => (
                 <tr key={i} className="hover:bg-white/5 transition-colors">
-                  <td className="px-6 py-4 font-bold text-text">{row.id}</td>
-                  <td className="px-6 py-4 text-text2">{row.name}</td>
-                  <td className="px-6 py-4 text-text3 text-xs">{row.class}</td>
-                  <td className="px-6 py-4 text-text2">{row.sub}</td>
-                  <td className="px-6 py-4 text-text2">{row.comm}</td>
+                  <td className="px-6 py-4 font-bold text-text">{row.students?.student_no || '—'}</td>
+                  <td className="px-6 py-4 text-text2">{row.students?.full_name || '—'}</td>
+                  <td className="px-6 py-4 text-text3 text-xs">{row.students?.grade} - {row.students?.classroom}</td>
+                  <td className="px-6 py-4 text-text2">غير محدد</td>
+                  <td className="px-6 py-4 text-text2">{row.committees?.name || '—'}</td>
                   <td className="px-6 py-4">
                     <span className={cn(
                       "px-2 py-1 text-[10px] font-bold rounded-md border",
@@ -99,10 +126,16 @@ export const Reports: React.FC = () => {
                       {row.status === 'present' ? 'حاضر' : 'غائب'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-text3 text-xs">{row.time}</td>
-                  <td className="px-6 py-4 text-text2">{row.teacher}</td>
+                  <td className="px-6 py-4 text-text3 text-xs">
+                    {row.recorded_at ? new Date(row.recorded_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </td>
+                  <td className="px-6 py-4 text-text2">{row.teachers?.full_name || '—'}</td>
                 </tr>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan={8} className="p-10 text-center text-text3">لا توجد سجلات حضور لهذا اليوم</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

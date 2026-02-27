@@ -37,6 +37,7 @@ export const Dashboard: React.FC = () => {
     { name: 'لم يُستلم', value: 0, color: '#ef4444' },
   ]);
   const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,12 +47,13 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const fetchStats = async () => {
-    const [sData, tData, aData, cStats, eData] = await Promise.all([
+    const [sData, tData, aData, cStats, eData, absentData] = await Promise.all([
       sbFetch<any>('students', 'GET', null, '?select=id'),
       sbFetch<any>('teachers', 'GET', null, '?select=id'),
       sbFetch<any>('attendance', 'GET', null, '?select=id,status,recorded_at'),
       sbFetch<any>('v_committee_summary', 'GET', null, '?select=*'),
-      sbFetch<any>('envelopes', 'GET', null, '?select=status')
+      sbFetch<any>('envelopes', 'GET', null, '?select=status,envelope_no,updated_at,committees(name)'),
+      sbFetch<any>('v_absent_students', 'GET', null, '?select=*&limit=5')
     ]);
 
     const totalStudents = sData?.length || 0;
@@ -86,13 +88,37 @@ export const Dashboard: React.FC = () => {
       ]);
     }
 
+    // Combine alerts
+    const combinedAlerts: any[] = [];
+    if (absentData) {
+      absentData.forEach((a: any) => {
+        combinedAlerts.push({
+          id: `absent-${a.student_no}`,
+          type: 'error',
+          title: `غياب طالب: ${a.full_name}`,
+          desc: `لجنة ${a.committee_name} — ${a.grade}`,
+          time: a.recorded_at ? new Date(a.recorded_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'الآن',
+          icon: XCircle
+        });
+      });
+    }
+    if (eData) {
+      eData.filter((e: any) => e.status !== 'delivered').forEach((e: any) => {
+        combinedAlerts.push({
+          id: `env-${e.envelope_no}`,
+          type: 'warning',
+          title: `تأخر مظروف: ${e.envelope_no}`,
+          desc: `لجنة ${e.committees?.name || '—'} — الحالة: ${e.status}`,
+          time: e.updated_at ? new Date(e.updated_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'الآن',
+          icon: Package
+        });
+      });
+    }
+    setAlerts(combinedAlerts.slice(0, 5));
+
     if (aData) {
-      // Group attendance by day of week
       const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
       const history = days.map(day => {
-        // This is a simplification. In a real app, we'd filter by actual date.
-        // For now, let's just show current data distributed if we had dates.
-        // Since we don't have historical data easily in this fetch, let's just show today's data for the current day.
         const today = new Date().toLocaleDateString('ar-SA', { weekday: 'long' });
         if (today.includes(day)) {
           return { name: day, حضور: presentCount, غياب: absentCount };
@@ -137,9 +163,8 @@ export const Dashboard: React.FC = () => {
 
   const filteredCommittees = committeeStats.filter(c => {
     if (filterStatus === 'all') return true;
-    // For now, "active" means has at least one student present or is marked as active in DB
-    // Since we don't have a robust 'active' flag in this view yet, let's use present_count > 0
-    return c.present_count > 0;
+    // Active means has students assigned
+    return c.total_students > 0;
   });
 
   return (
@@ -192,11 +217,29 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
           <div className="p-5 space-y-3 flex-1">
-            {/* Real-time alerts would be fetched from a notifications table */}
-            <div className="flex flex-col items-center justify-center h-full text-text3 py-10">
-              <Clock size={32} className="mb-2 opacity-20" />
-              <p className="text-xs">لا توجد تنبيهات جديدة حالياً</p>
-            </div>
+            {alerts.length > 0 ? alerts.map((alert) => (
+              <div key={alert.id} className="flex items-start gap-3 p-3 rounded-xl bg-bg3/50 border border-border/50">
+                <div className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                  alert.type === 'success' && "bg-green/10 text-green",
+                  alert.type === 'info' && "bg-accent/10 text-accent",
+                  alert.type === 'error' && "bg-red/10 text-red",
+                  alert.type === 'warning' && "bg-gold/10 text-gold"
+                )}>
+                  <alert.icon size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs font-bold text-text truncate">{alert.title}</h4>
+                  <p className="text-[10px] text-text3 truncate">{alert.desc}</p>
+                </div>
+                <span className="text-[9px] font-bold text-text3 whitespace-nowrap">{alert.time}</span>
+              </div>
+            )) : (
+              <div className="flex flex-col items-center justify-center h-full text-text3 py-10">
+                <Clock size={32} className="mb-2 opacity-20" />
+                <p className="text-xs">لا توجد تنبيهات جديدة حالياً</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -268,10 +311,28 @@ export const Dashboard: React.FC = () => {
             النشاط الأخير
           </h3>
           <div className="space-y-4">
-            <div className="flex flex-col items-center justify-center py-10 text-text3">
-              <RefreshCw size={24} className="mb-2 opacity-20" />
-              <p className="text-xs">لا يوجد نشاط مسجل</p>
-            </div>
+            {alerts.length > 0 ? alerts.map((item) => (
+              <div key={item.id} className="flex items-center gap-3">
+                <div className={cn(
+                  "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                  item.type === 'success' && "bg-green/10 text-green",
+                  item.type === 'info' && "bg-accent/10 text-accent",
+                  item.type === 'error' && "bg-red/10 text-red",
+                  item.type === 'warning' && "bg-gold/10 text-gold"
+                )}>
+                  <item.icon size={14} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-text truncate">{item.title}</p>
+                  <p className="text-[10px] text-text3 truncate">{item.time}</p>
+                </div>
+              </div>
+            )) : (
+              <div className="flex flex-col items-center justify-center py-10 text-text3">
+                <RefreshCw size={24} className="mb-2 opacity-20" />
+                <p className="text-xs">لا يوجد نشاط مسجل</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
