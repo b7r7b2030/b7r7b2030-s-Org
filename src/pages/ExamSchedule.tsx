@@ -181,6 +181,48 @@ export const ExamSchedulePage: React.FC = () => {
   if (printMode) {
     return (
       <div className="bg-white min-h-screen p-0 text-black print:p-0 font-sans" dir="rtl">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            @page { 
+              size: A4; 
+              margin: 0mm; 
+            }
+            body { 
+              background: white !important; 
+              margin: 0;
+              padding: 0;
+              -webkit-print-color-adjust: exact;
+            }
+            .fixed { display: none !important; }
+            .print-container {
+              width: 210mm;
+              min-height: 297mm;
+              padding: 15mm;
+              margin: 0 auto;
+              box-sizing: border-box;
+              position: relative;
+              page-break-after: always;
+            }
+            /* Hide browser headers/footers */
+            header, footer, .no-print { display: none !important; }
+            
+            /* Dynamic font scaling based on row count */
+            table { 
+              width: 100%;
+              font-size: ${sortedDates.length > 10 ? '7pt' : sortedDates.length > 8 ? '8pt' : '9pt'};
+            }
+            th, td { padding: 4px !important; border-width: 1.5pt !important; }
+            h1 { font-size: 14pt !important; }
+            .instructions { font-size: 8pt !important; }
+          }
+          .print-container {
+            background: white;
+            width: 210mm;
+            margin: 0 auto;
+            padding: 15mm;
+          }
+        `}} />
+
         <div className="fixed top-4 right-4 flex gap-2 print:hidden z-50">
           <button 
             onClick={() => setPrintMode(false)}
@@ -196,7 +238,7 @@ export const ExamSchedulePage: React.FC = () => {
           </button>
         </div>
 
-        <div className="p-8 max-w-[210mm] mx-auto border border-gray-200 bg-white shadow-2xl print:shadow-none print:border-none">
+        <div className="print-container shadow-2xl print:shadow-none">
           {/* Header */}
           <div className="w-full flex justify-between items-center mb-6 border-b-2 border-black pb-4">
             <div className="text-right space-y-0.5">
@@ -220,7 +262,7 @@ export const ExamSchedulePage: React.FC = () => {
             <p className="text-lg font-bold mt-2">جدول الاختبارات التحريرية</p>
           </div>
 
-          <table className="w-full border-collapse border-2 border-black text-center text-xs">
+          <table className="w-full border-collapse border-2 border-black text-center">
             <thead>
               <tr className="bg-gray-100">
                 <th className="border-2 border-black p-2 w-20" rowSpan={2}>اليوم</th>
@@ -269,7 +311,7 @@ export const ExamSchedulePage: React.FC = () => {
           </table>
 
           {/* Instructions */}
-          <div className="mt-8 text-right space-y-2">
+          <div className="mt-8 text-right space-y-2 instructions">
             <p className="font-bold text-red-600">ملاحظة :</p>
             <ul className="list-disc list-inside text-xs space-y-1 pr-4">
               <li>ضرورة الحضور قبل موعد الاختبار بـ ( 15 دقيقة ) على الأقل .</li>

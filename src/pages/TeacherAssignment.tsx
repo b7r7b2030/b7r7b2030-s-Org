@@ -184,6 +184,47 @@ export const TeacherAssignment: React.FC = () => {
 
     return (
       <div className="bg-white min-h-screen p-0 m-0 text-black print:p-0 font-sans" dir="rtl">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            @page { 
+              size: A4; 
+              margin: 0mm; 
+            }
+            body { 
+              background: white !important; 
+              margin: 0;
+              padding: 0;
+              -webkit-print-color-adjust: exact;
+            }
+            .fixed { display: none !important; }
+            .print-container {
+              width: 210mm;
+              min-height: 297mm;
+              padding: 15mm;
+              margin: 0 auto;
+              box-sizing: border-box;
+              position: relative;
+              page-break-after: always;
+            }
+            /* Hide browser headers/footers */
+            header, footer, .no-print { display: none !important; }
+            
+            /* Dynamic font scaling based on row count */
+            table { 
+              width: 100%;
+              font-size: ${reportData.length > 25 ? '7pt' : reportData.length > 20 ? '8pt' : '9pt'};
+            }
+            th, td { padding: 4px !important; border-width: 1.5pt !important; }
+            h2 { font-size: 14pt !important; }
+          }
+          .print-container {
+            background: white;
+            width: 210mm;
+            margin: 0 auto;
+            padding: 15mm;
+          }
+        `}} />
+
         <div className="fixed top-4 right-4 flex gap-2 print:hidden z-50">
           <button 
             onClick={() => setPrintMode(false)}
@@ -199,7 +240,7 @@ export const TeacherAssignment: React.FC = () => {
           </button>
         </div>
 
-        <div className="p-8 max-w-[210mm] mx-auto bg-white min-h-[297mm]">
+        <div className="print-container shadow-2xl print:shadow-none">
           {/* Header */}
           <div className="flex justify-between items-start mb-6 border-b-2 border-black pb-4">
             <div className="text-right space-y-1">
@@ -228,15 +269,15 @@ export const TeacherAssignment: React.FC = () => {
             الفترة {selectedPeriod === 1 ? 'الأولى' : selectedPeriod === 2 ? 'الثانية' : 'الثالثة'}
           </div>
 
-          <table className="w-full border-collapse border border-black text-sm">
+          <table className="w-full border-collapse border-2 border-black text-center">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border border-black p-2 w-12">#</th>
-                <th className="border border-black p-2">اسم المعلم</th>
-                <th className="border border-black p-2 w-20">اللجنة</th>
-                <th className="border border-black p-2">مقر اللجنة</th>
-                <th className="border border-black p-2 w-32">التوقيع</th>
-                <th className="border border-black p-2">مواد الاختبار</th>
+                <th className="border-2 border-black p-2 w-12">#</th>
+                <th className="border-2 border-black p-2">اسم المعلم</th>
+                <th className="border-2 border-black p-2 w-20">اللجنة</th>
+                <th className="border-2 border-black p-2">مقر اللجنة</th>
+                <th className="border-2 border-black p-2 w-32">التوقيع</th>
+                <th className="border-2 border-black p-2">مواد الاختبار</th>
               </tr>
             </thead>
             <tbody>
@@ -248,17 +289,6 @@ export const TeacherAssignment: React.FC = () => {
                   <td className="border border-black p-2 text-center">{row.location}</td>
                   <td className="border border-black p-2 h-10"></td>
                   <td className="border border-black p-2 text-xs">{row.subjects}</td>
-                </tr>
-              ))}
-              {/* Fill empty rows to make it look full if needed */}
-              {Array.from({ length: Math.max(0, 20 - reportData.length) }).map((_, i) => (
-                <tr key={`empty-${i}`}>
-                  <td className="border border-black p-2 text-center">{reportData.length + i + 1}</td>
-                  <td className="border border-black p-2"></td>
-                  <td className="border border-black p-2"></td>
-                  <td className="border border-black p-2"></td>
-                  <td className="border border-black p-2 h-10"></td>
-                  <td className="border border-black p-2"></td>
                 </tr>
               ))}
             </tbody>
@@ -275,14 +305,6 @@ export const TeacherAssignment: React.FC = () => {
             </div>
           </div>
         </div>
-
-        <style dangerouslySetInnerHTML={{ __html: `
-          @media print {
-            @page { size: A4; margin: 10mm; }
-            body { background: white !important; }
-            .fixed { display: none !important; }
-          }
-        `}} />
       </div>
     );
   }
