@@ -13,9 +13,12 @@ import {
   AlertCircle,
   Printer,
   ArrowRight,
-  FileText
+  FileText,
+  MessageSquare,
+  Download
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import * as XLSX from 'xlsx';
 import { Teacher, Committee, TeacherAssignment as Assignment, ExamSchedule } from '../types';
 import { sbFetch } from '../services/supabase';
 
@@ -159,6 +162,69 @@ export const TeacherAssignment: React.FC = () => {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const sendWhatsApp = (teacher: Teacher, committee: Committee) => {
+    if (!teacher.phone) {
+      alert('لا يوجد رقم جوال مسجل لهذا المعلم');
+      return;
+    }
+
+    const currentDaySchedules = schedules.filter(s => s.exam_date === selectedDate && s.period === selectedPeriod);
+    const subjects = currentDaySchedules.map(s => s.subject).join(' / ');
+    const dayName = currentDaySchedules[0]?.day_name || '';
+
+    const message = `السلام عليكم أ. ${teacher.full_name}%0A%0Aتم تكليفكم بالمراقبة في لجنة (${committee.name})%0Aالمقر: ${committee.location || '—'}%0Aاليوم: ${dayName}%0Aالتاريخ: ${selectedDate}%0Aالفترة: ${selectedPeriod}%0Aالمواد: ${subjects}%0A%0Aنتمنى لكم التوفيق.`;
+    
+    // Clean phone number (remove non-digits, handle international format)
+    let phone = teacher.phone.replace(/\D/g, '');
+    if (phone.startsWith('05')) {
+      phone = '966' + phone.substring(1);
+    } else if (phone.startsWith('5')) {
+      phone = '966' + phone;
+    }
+
+    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+  };
+
+  const exportForBulkWhatsApp = () => {
+    const currentDaySchedules = schedules.filter(s => s.exam_date === selectedDate && s.period === selectedPeriod);
+    const subjects = currentDaySchedules.map(s => s.subject).join(' / ');
+    const dayName = currentDaySchedules[0]?.day_name || '';
+
+    const data: any[] = [];
+    committees.forEach(committee => {
+      [1, 2].forEach(slot => {
+        const teacherId = getAssignedTeacherId(committee.id!, slot);
+        if (teacherId) {
+          const teacher = teachers.find(t => t.id === teacherId);
+          if (teacher && teacher.phone) {
+            let phone = teacher.phone.replace(/\D/g, '');
+            if (phone.startsWith('05')) phone = '966' + phone.substring(1);
+            else if (phone.startsWith('5')) phone = '966' + phone;
+
+            const message = `السلام عليكم أ. ${teacher.full_name}\n\nتم تكليفكم بالمراقبة في لجنة (${committee.name})\nالمقر: ${committee.location || '—'}\nاليوم: ${dayName}\nالتاريخ: ${selectedDate}\nالفترة: ${selectedPeriod}\nالمواد: ${subjects}\n\nنتمنى لكم التوفيق.`;
+            
+            data.push({
+              'Contact Numbers': phone,
+              'Name': teacher.full_name,
+              'Message 1': message,
+              'Variable': ''
+            });
+          }
+        }
+      });
+    });
+
+    if (data.length === 0) {
+      alert('لا يوجد تكليفات تحتوي على أرقام جوال لتصديرها في هذا اليوم والفترة');
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Assignments");
+    XLSX.writeFile(workbook, `whatsapp_bulk_${selectedDate}_p${selectedPeriod}.xlsx`);
   };
 
   if (printMode) {
@@ -429,6 +495,13 @@ export const TeacherAssignment: React.FC = () => {
                 حفظ التوزيع
               </button>
               <button 
+                onClick={exportForBulkWhatsApp}
+                className="bg-green-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-green-700 transition-all flex items-center gap-2 shadow-lg shadow-green-900/20"
+              >
+                <Download size={18} />
+                تصدير للواتساب الجماعي
+              </button>
+              <button 
                 onClick={() => setPrintMode(true)}
                 className="bg-gold text-black font-bold px-6 py-2.5 rounded-xl hover:bg-gold/90 transition-all flex items-center gap-2 shadow-lg shadow-gold/20"
               >
@@ -549,9 +622,31 @@ export const TeacherAssignment: React.FC = () => {
                   </div>
 
                   {(teacher1 || teacher2) && (
-                    <div className="mt-4 pt-4 border-t border-accent/10 flex items-center gap-2 text-accent">
-                      <CheckCircle2 size={14} />
-                      <span className="text-xs font-bold">تم التكليف بنجاح</span>
+                    <div className="mt-4 pt-4 border-t border-accent/10 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-accent">
+                        <CheckCircle2 size={14} />
+                        <span className="text-xs font-bold">تم التكليف بنجاح</span>
+                      </div>
+                      <div className="flex gap-2">
+                        {teacher1 && (
+                          <button 
+                            onClick={() => sendWhatsApp(teacher1, committee)}
+                            title={`إرسال واتساب لـ ${teacher1.full_name}`}
+                            className="p-2 bg-green-500/10 text-green-600 rounded-lg hover:bg-green-500 hover:text-white transition-all"
+                          >
+                            <MessageSquare size={14} />
+                          </button>
+                        )}
+                        {teacher2 && (
+                          <button 
+                            onClick={() => sendWhatsApp(teacher2, committee)}
+                            title={`إرسال واتساب لـ ${teacher2.full_name}`}
+                            className="p-2 bg-green-500/10 text-green-600 rounded-lg hover:bg-green-500 hover:text-white transition-all"
+                          >
+                            <MessageSquare size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
