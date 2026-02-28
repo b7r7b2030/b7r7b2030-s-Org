@@ -9,10 +9,14 @@ import {
   Loader2,
   ArrowLeftRight,
   History,
-  School
+  School,
+  QrCode,
+  X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { sbFetch } from '../services/supabase';
+import { QRScanner } from '../components/QRScanner';
+import { UserRole } from '../types';
 
 interface EnvelopeTracking {
   envelope_no: string;
@@ -78,11 +82,16 @@ const EnvelopeTrackSteps: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
-export const Envelopes: React.FC = () => {
+interface EnvelopesProps {
+  userRole?: UserRole;
+}
+
+export const Envelopes: React.FC<EnvelopesProps> = ({ userRole }) => {
   const [envelopes, setEnvelopes] = useState<EnvelopeTracking[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('الكل');
+  const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
     fetchEnvelopes();
@@ -99,6 +108,46 @@ export const Envelopes: React.FC = () => {
       console.error('Error fetching envelopes:', error);
     }
     setLoading(false);
+  };
+
+  const handleReceiveScan = async (data: string) => {
+    setIsScanning(false);
+    setLoading(true);
+    try {
+      let parsed;
+      try {
+        parsed = JSON.parse(data);
+      } catch (e) {
+        throw new Error('رمز QR غير صالح. يرجى مسح رمز المظروف.');
+      }
+
+      if (parsed.type === 'envelope') {
+        const envelopeNo = parsed.envelope_no || parsed.id;
+        
+        // Find envelope in current list to get committee_id
+        const env = envelopes.find(e => e.envelope_no === envelopeNo);
+        if (!env) throw new Error('المظروف غير موجود في النظام.');
+
+        // Update status to delivered
+        const res = await sbFetch('envelopes', 'POST', {
+          envelope_no: envelopeNo,
+          status: 'delivered',
+          delivered_at: new Date().toISOString(),
+          notes: 'تم الاستلام في الكنترول عبر المسح المباشر'
+        });
+
+        if (res) {
+          alert(`تم استلام المظروف رقم ${envelopeNo} بنجاح.`);
+          fetchEnvelopes();
+        }
+      } else {
+        throw new Error('هذا الرمز ليس رمز مظروف.');
+      }
+    } catch (error: any) {
+      alert(error.message || 'خطأ في معالجة الرمز');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getStatusInfo = (status: string) => {
@@ -131,8 +180,39 @@ export const Envelopes: React.FC = () => {
     active: envelopes.filter(e => ['received', 'in_progress'].includes(e.envelope_status)).length,
   };
 
+  if (isScanning) {
+    return (
+      <QRScanner 
+        title="مسح رمز المظروف للاستلام" 
+        onScan={handleReceiveScan} 
+        onClose={() => setIsScanning(false)} 
+      />
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Control Actions */}
+      {userRole === UserRole.CONTROL && (
+        <div className="bg-linear-to-r from-green/20 to-accent/20 border border-green/30 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-green text-white rounded-2xl flex items-center justify-center shadow-lg shadow-green/20">
+              <QrCode size={24} />
+            </div>
+            <div>
+              <h3 className="font-bold text-lg text-text">وضع الاستلام السريع</h3>
+              <p className="text-xs text-text3">قم بمسح رموز المظاريف التي يسلمها المعلمون لتأكيد الاستلام فوراً</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setIsScanning(true)}
+            className="w-full md:w-auto px-8 py-3 bg-green text-white font-black rounded-xl shadow-xl shadow-green/20 hover:scale-105 transition-all flex items-center justify-center gap-2"
+          >
+            <QrCode size={20} />
+            ابدأ مسح المظاريف
+          </button>
+        </div>
+      )}
       {/* Stats Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[

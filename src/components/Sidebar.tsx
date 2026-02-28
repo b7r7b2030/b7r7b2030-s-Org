@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { cn } from '../lib/utils';
 import { UserRole } from '../types';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, 
   Bell, 
@@ -17,7 +18,9 @@ import {
   LogOut,
   Menu,
   X,
-  Calendar
+  Calendar,
+  AlertTriangle,
+  ClipboardCheck
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -35,21 +38,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   userRole,
   onLogout
 }) => {
-  const [isOpen, setIsOpen] = React.useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const navItems = [
-    { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.COUNSELOR] },
-    { id: 'alerts', label: 'التنبيهات', icon: Bell, badge: alertCount, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR] },
+    { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.COUNSELOR, UserRole.CONTROL] },
+    { id: 'alerts', label: 'التنبيهات', icon: Bell, badge: alertCount, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR, UserRole.CONTROL] },
     { id: 'students', label: 'الطلاب', icon: Users, roles: [UserRole.PRINCIPAL] },
     { id: 'teachers', label: 'المعلمون', icon: UserSquare2, roles: [UserRole.PRINCIPAL] },
-    { id: 'committees', label: 'اللجان', icon: School, roles: [UserRole.PRINCIPAL, UserRole.TEACHER] },
+    { id: 'committees', label: 'اللجان', icon: School, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.CONTROL] },
     { id: 'teacherassignment', label: 'توزيع المعلمين', icon: Users, roles: [UserRole.PRINCIPAL] },
-    { id: 'envelopes', label: 'المظاريف', icon: Package, roles: [UserRole.PRINCIPAL, UserRole.TEACHER] },
-    { id: 'attendance', label: 'التحضير', icon: CheckCircle2, roles: [UserRole.TEACHER, UserRole.COUNSELOR] },
+    { id: 'envelopes', label: 'المظاريف', icon: Package, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.CONTROL] },
+    { id: 'attendance', label: 'التحضير', icon: CheckCircle2, roles: [UserRole.TEACHER, UserRole.COUNSELOR, UserRole.CONTROL] },
     { id: 'examschedule', label: 'الجدول', icon: Calendar, roles: [UserRole.PRINCIPAL] },
-    { id: 'qrcodes', label: 'QR', icon: QrCode, roles: [UserRole.PRINCIPAL, UserRole.TEACHER] },
-    { id: 'reports', label: 'تقارير', icon: BarChart3, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR] },
-    { id: 'analytics', label: 'تحليل', icon: TrendingUp, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR] },
+    { id: 'qrcodes', label: 'QR', icon: QrCode, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.CONTROL] },
+    { id: 'reports', label: 'تقارير', icon: BarChart3, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR, UserRole.CONTROL] },
+    { id: 'analytics', label: 'تحليل', icon: TrendingUp, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR, UserRole.CONTROL] },
     { id: 'setup', label: 'إعداد', icon: Settings, roles: [UserRole.PRINCIPAL] },
   ];
 
@@ -60,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case UserRole.PRINCIPAL: return 'مدير المدرسة';
       case UserRole.TEACHER: return 'معلم مراقب';
       case UserRole.COUNSELOR: return 'مرشد طلابي';
+      case UserRole.CONTROL: return 'كنترول الاختبارات';
       default: return 'مستخدم';
     }
   };
@@ -69,6 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case UserRole.PRINCIPAL: return '👑';
       case UserRole.TEACHER: return '👨‍🏫';
       case UserRole.COUNSELOR: return '🤝';
+      case UserRole.CONTROL: return '📋';
       default: return '👤';
     }
   };
@@ -154,7 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
           <button 
-            onClick={onLogout}
+            onClick={() => setShowLogoutConfirm(true)}
             className="w-full flex items-center justify-center gap-2 py-2 bg-red/10 text-red hover:bg-red hover:text-white rounded-xl text-xs font-bold transition-all"
           >
             <LogOut size={14} />
@@ -162,6 +168,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
       </aside>
+
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {showLogoutConfirm && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowLogoutConfirm(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-sm bg-card border border-border rounded-[32px] p-8 text-center shadow-2xl overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-red to-orange-500" />
+              <div className="w-20 h-20 bg-red/10 text-red rounded-full flex items-center justify-center mx-auto mb-6">
+                <LogOut size={40} />
+              </div>
+              <h3 className="text-2xl font-display font-black text-text mb-2">تسجيل الخروج</h3>
+              <p className="text-text3 text-sm mb-8 leading-relaxed">
+                هل أنت متأكد من رغبتك في تسجيل الخروج؟ سيتم إنهاء الجلسة الحالية.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="py-4 bg-bg3 text-text font-bold rounded-2xl hover:bg-bg transition-all"
+                >
+                  إلغاء
+                </button>
+                <button 
+                  onClick={onLogout}
+                  className="py-4 bg-red text-white font-bold rounded-2xl shadow-lg shadow-red/20 hover:scale-[1.02] active:scale-95 transition-all"
+                >
+                  تأكيد الخروج
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Overlay for mobile */}
       {isOpen && (

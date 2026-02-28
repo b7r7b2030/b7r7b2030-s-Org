@@ -83,14 +83,19 @@ export default function App() {
       return <TeacherDashboard />;
     }
 
+    // Special case for control dashboard
+    if (userRole === UserRole.CONTROL && activePage === 'dashboard') {
+      return <Dashboard />; // For now, use the main dashboard for control
+    }
+
     switch (activePage) {
       case 'dashboard': return <Dashboard />;
       case 'students': return <Students />;
       case 'teachers': return <Teachers />;
       case 'committees': return <Committees />;
-      case 'envelopes': return <Envelopes />;
+      case 'envelopes': return <Envelopes userRole={userRole} />;
       case 'attendance': 
-        return userRole === UserRole.TEACHER ? <TeacherDashboard /> : <Attendance userRole={userRole} />;
+        return (userRole === UserRole.TEACHER || userRole === UserRole.CONTROL) ? <TeacherDashboard /> : <Attendance userRole={userRole} />;
       case 'qrcodes': return <QRCodes />;
       case 'alerts': return <Alerts />;
       case 'reports': return <Reports />;
@@ -120,7 +125,7 @@ export default function App() {
         <div className="absolute top-[40%] left-[40%] w-[20%] h-[20%] bg-gold/5 blur-[100px] rounded-full"></div>
       </div>
 
-      <div className="print:hidden">
+      <div className={cn("print:hidden", (userRole === UserRole.TEACHER && activePage === 'dashboard') && "hidden lg:block")}>
         <Sidebar 
           activePage={activePage} 
           setActivePage={setActivePage} 
@@ -130,8 +135,11 @@ export default function App() {
         />
       </div>
 
-      <main className="lg:mr-64 min-h-screen flex flex-col relative z-10 pb-20 lg:pb-0 print:mr-0 print:pb-0">
-        <div className="print:hidden">
+      <main className={cn(
+        "lg:mr-64 min-h-screen flex flex-col relative z-10 pb-20 lg:pb-0 print:mr-0 print:pb-0",
+        (userRole === UserRole.TEACHER && activePage === 'dashboard') && "pb-0 lg:pb-0"
+      )}>
+        <div className={cn("print:hidden", (userRole === UserRole.TEACHER && activePage === 'dashboard') && "hidden lg:block")}>
           <Topbar 
             title={pageInfo[activePage]?.title || activePage}
             subtitle={pageInfo[activePage]?.subtitle || ''}
@@ -142,7 +150,10 @@ export default function App() {
           />
         </div>
 
-        <div className="flex-1 p-8 max-w-7xl mx-auto w-full print:p-0 print:max-w-none">
+        <div className={cn(
+          "flex-1 p-8 max-w-7xl mx-auto w-full print:p-0 print:max-w-none",
+          (userRole === UserRole.TEACHER && activePage === 'dashboard') && "p-0 lg:p-8 max-w-none"
+        )}>
           {renderPage()}
         </div>
 

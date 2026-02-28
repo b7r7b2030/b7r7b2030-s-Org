@@ -4,7 +4,8 @@ import {
   ShieldCheck, 
   UserSquare2, 
   HeartHandshake,
-  ArrowRight
+  ArrowRight,
+  ClipboardCheck
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -20,6 +21,13 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onSelect }) => {
       desc: 'صلاحيات كاملة لإدارة النظام والتقارير والتحليلات', 
       icon: ShieldCheck, 
       color: 'accent' 
+    },
+    { 
+      id: UserRole.CONTROL, 
+      title: 'كنترول الاختبارات', 
+      desc: 'مراقبة المظاريف، استلام وتسليم، وطباعة تقارير اللجان', 
+      icon: ClipboardCheck, 
+      color: 'green' 
     },
     { 
       id: UserRole.TEACHER, 
@@ -43,7 +51,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onSelect }) => {
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-accent/5 blur-[120px] rounded-full"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple/5 blur-[120px] rounded-full"></div>
 
-      <div className="max-w-4xl w-full space-y-8 relative z-10">
+      <div className="max-w-5xl w-full space-y-8 relative z-10">
         <div className="text-center space-y-4">
           <div className="w-20 h-20 bg-linear-to-br from-accent to-purple rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-accent/20 mx-auto mb-6">
             <ShieldCheck size={40} />
@@ -52,7 +60,7 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onSelect }) => {
           <p className="text-text3 text-lg max-w-lg mx-auto">الرجاء اختيار نوع الحساب للمتابعة إلى لوحة التحكم الخاصة بك</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-12">
           {roles.map((role) => (
             <button
               key={role.id}
@@ -63,7 +71,8 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({ onSelect }) => {
                 "w-14 h-14 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform",
                 role.color === 'accent' && "bg-accent/10 text-accent",
                 role.color === 'gold' && "bg-gold/10 text-gold",
-                role.color === 'purple' && "bg-purple/10 text-purple"
+                role.color === 'purple' && "bg-purple/10 text-purple",
+                role.color === 'green' && "bg-green/10 text-green"
               )}>
                 <role.icon size={28} />
               </div>

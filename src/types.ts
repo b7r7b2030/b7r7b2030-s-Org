@@ -1,7 +1,8 @@
 export enum UserRole {
   PRINCIPAL = 'PRINCIPAL',
   TEACHER = 'TEACHER',
-  COUNSELOR = 'COUNSELOR'
+  COUNSELOR = 'COUNSELOR',
+  CONTROL = 'CONTROL'
 }
 
 export interface User {

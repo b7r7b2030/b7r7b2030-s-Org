@@ -11,11 +11,13 @@ import {
   Calendar,
   AlertCircle,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  QrCode,
+  ClipboardCheck
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { QRScanner } from '../components/QRScanner';
-import { Student, Committee } from '../types';
+import { Student, Committee, AttendanceRecord } from '../types';
 import { sbFetch } from '../services/supabase';
 
 export const TeacherDashboard: React.FC = () => {
@@ -37,6 +39,46 @@ export const TeacherDashboard: React.FC = () => {
     'الثالث': 3
   };
 
+  const [isDelivering, setIsDelivering] = useState(false);
+  const [alertSent, setAlertSent] = useState(false);
+
+  // Check for 15-minute late students
+  useEffect(() => {
+    if (!committee || students.length === 0 || alertSent) return;
+
+    const checkLateStudents = async () => {
+      const now = new Date();
+      const startTimeStr = committee.start_time; // e.g., "08:00"
+      if (!startTimeStr) return;
+
+      const [hours, minutes] = startTimeStr.split(':').map(Number);
+      const examStartTime = new Date();
+      examStartTime.setHours(hours, minutes, 0, 0);
+
+      const diffInMinutes = (now.getTime() - examStartTime.getTime()) / (1000 * 60);
+
+      if (diffInMinutes >= 15) {
+        const absentStudents = students.filter(s => attendance[s.id!] === 'absent');
+        if (absentStudents.length > 0) {
+          // Send alert to counselor
+          await sbFetch('alerts', 'POST', {
+            type: 'red',
+            title: `تنبيه غياب متأخر - لجنة ${committee.name}`,
+            body: `يوجد عدد ${absentStudents.length} طلاب غائبين بعد مرور 15 دقيقة من بداية الاختبار في لجنة ${committee.name}.`,
+            created_at: new Date().toISOString()
+          });
+          setAlertSent(true);
+          console.log("Late alert sent to counselor");
+        }
+      }
+    };
+
+    const timer = setInterval(checkLateStudents, 60000); // Check every minute
+    return () => clearInterval(timer);
+  }, [committee, students, attendance, alertSent]);
+
+  const [attendanceRecords, setAttendanceRecords] = useState<Record<string, AttendanceRecord>>({});
+
   const handleScan = async (data: string) => {
     setLoading(true);
     setIsScanning(false);
@@ -47,6 +89,31 @@ export const TeacherDashboard: React.FC = () => {
         parsed = JSON.parse(data);
       } catch (e) {
         throw new Error('رمز QR غير صالح. يرجى استخدام الرموز المولدة من النظام.');
+      }
+
+      // Handle Envelope Handover to Control
+      if (isDelivering) {
+        if (parsed.type === 'control_handover') {
+          if (!committee) throw new Error('يرجى مسح اللجنة أولاً.');
+          
+          // Update envelope status in DB
+          const envRes = await sbFetch('envelopes', 'POST', {
+            committee_id: committee.id,
+            status: 'delivered',
+            delivered_at: new Date().toISOString(),
+            notes: 'تم التسليم للكنترول عبر المسح'
+          });
+
+          if (envRes) {
+            alert('تم تسليم المظروف للكنترول بنجاح. شكراً لك.');
+            setCommittee(null);
+            setStudents([]);
+            setIsDelivering(false);
+            return;
+          }
+        } else {
+          throw new Error('يرجى مسح رمز "استلام الكنترول" الخاص بمكتب الكنترول.');
+        }
       }
 
       if (parsed.type === 'teacher_committee' || parsed.type === 'envelope' || parsed.type === 'committee') {
@@ -77,12 +144,35 @@ export const TeacherDashboard: React.FC = () => {
             setStudents(sorted);
             
             // Fetch existing attendance
-            const aData = await sbFetch<any>('attendance', 'GET', null, `?committee_id=eq.${currentCommittee.id}`);
-            if (aData) {
-              const attMap: any = {};
-              aData.forEach((a: any) => attMap[a.student_id] = a.status);
-              setAttendance(attMap);
+            const aData = await sbFetch<AttendanceRecord>('attendance', 'GET', null, `?committee_id=eq.${currentCommittee.id}`);
+            const attMap: Record<string, string> = {};
+            const recordMap: Record<string, AttendanceRecord> = {};
+            
+            if (aData && aData.length > 0) {
+              aData.forEach((a) => {
+                attMap[a.student_id] = a.status;
+                recordMap[a.student_id] = a;
+              });
+            } else {
+              // Default all to present if no attendance recorded yet
+              sorted.forEach(s => {
+                if (s.id) attMap[s.id] = 'present';
+              });
+              
+              const defaultAttendance = sorted.map(s => ({
+                student_id: s.id,
+                committee_id: currentCommittee.id,
+                status: 'present',
+                recorded_at: new Date().toISOString()
+              }));
+              
+              const saved = await sbFetch<AttendanceRecord>('attendance', 'POST', defaultAttendance);
+              if (saved) {
+                saved.forEach(a => recordMap[a.student_id] = a);
+              }
             }
+            setAttendance(attMap);
+            setAttendanceRecords(recordMap);
           } else {
             setStudents([]);
           }
@@ -104,172 +194,219 @@ export const TeacherDashboard: React.FC = () => {
   const handleAttendance = async (studentId: string, status: 'present' | 'absent' | 'late') => {
     if (!committee) return;
     
-    const res = await sbFetch('attendance', 'POST', {
-      student_id: studentId,
-      committee_id: committee.id,
-      status: status,
-      recorded_at: new Date().toISOString()
-    });
+    const existingRecord = attendanceRecords[studentId];
+    
+    // Optimistic update
+    setAttendance(prev => ({ ...prev, [studentId]: status }));
 
-    if (res) {
-      setAttendance(prev => ({ ...prev, [studentId]: status }));
+    let res;
+    if (existingRecord?.id) {
+      // Update existing record
+      res = await sbFetch<AttendanceRecord>('attendance', 'PATCH', {
+        status: status,
+        recorded_at: new Date().toISOString()
+      }, `?id=eq.${existingRecord.id}`);
+    } else {
+      // Create new record
+      res = await sbFetch<AttendanceRecord>('attendance', 'POST', {
+        student_id: studentId,
+        committee_id: committee.id,
+        status: status,
+        recorded_at: new Date().toISOString()
+      });
+    }
+
+    if (res && res.length > 0) {
+      setAttendanceRecords(prev => ({ ...prev, [studentId]: res![0] }));
+    } else if (!res) {
+      // Rollback on failure
+      alert('فشل تحديث الحالة. يرجى المحاولة مرة أخرى.');
+      // Re-fetch to sync
     }
   };
 
   const presentCount = Object.values(attendance).filter(v => v === 'present').length;
+  const absentCount = students.length - presentCount;
 
   if (isScanning) {
     return (
       <QRScanner 
-        title="مسح رمز اللجنة" 
+        title={isDelivering ? "مسح رمز استلام الكنترول" : "مسح رمز اللجنة"} 
         onScan={handleScan} 
-        onClose={() => setIsScanning(false)} 
+        onClose={() => {
+          setIsScanning(false);
+          setIsDelivering(false);
+        }} 
       />
     );
   }
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-        <RefreshCw size={48} className="text-accent animate-spin" />
-        <p className="text-text3 font-bold">جاري تحميل بيانات اللجنة والطلاب...</p>
+      <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-6 px-6">
+        <div className="relative">
+          <RefreshCw size={64} className="text-accent animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-8 h-8 bg-accent rounded-full animate-pulse"></div>
+          </div>
+        </div>
+        <div className="text-center space-y-2">
+          <p className="text-xl font-black text-text">جاري التحضير الذكي...</p>
+          <p className="text-text3 text-sm">يتم الآن جلب بيانات الطلاب وتعيين الحالة الافتراضية (حاضر)</p>
+        </div>
       </div>
     );
   }
 
   if (!committee) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
-        <div className="w-24 h-24 bg-accent/10 text-accent rounded-full flex items-center justify-center">
-          <School size={48} />
+      <div className="flex flex-col items-center justify-center min-h-[80vh] space-y-8 px-6">
+        <div className="relative">
+          <div className="w-32 h-32 bg-accent/10 text-accent rounded-full flex items-center justify-center animate-pulse">
+            <School size={64} />
+          </div>
+          <div className="absolute -top-2 -right-2 w-10 h-10 bg-gold text-black rounded-full flex items-center justify-center shadow-lg">
+            <QrCode size={20} />
+          </div>
         </div>
-        <div className="text-center space-y-2">
-          <h2 className="text-2xl font-display font-bold">بانتظار مسح رمز اللجنة</h2>
-          <p className="text-text3">يرجى مسح رمز QR الموجود على باب اللجنة لبدء التحضير</p>
+        <div className="text-center space-y-3">
+          <h2 className="text-3xl font-display font-black text-text">مرحباً بك، أيها المعلم</h2>
+          <p className="text-text3 max-w-xs mx-auto leading-relaxed">
+            لبدء عملية تحضير الطلاب، يرجى مسح رمز QR الموجود على باب اللجنة أو المظروف.
+          </p>
         </div>
         <button 
           onClick={() => setIsScanning(true)}
-          className="flex items-center gap-2 bg-accent text-white px-8 py-3 rounded-2xl font-bold shadow-lg shadow-accent/20"
+          className="w-full max-w-xs flex items-center justify-center gap-3 bg-accent text-white py-5 rounded-3xl font-black text-lg shadow-2xl shadow-accent/40 active:scale-95 transition-all"
         >
-          <Camera size={20} />
-          فتح الكاميرا للمسح
+          <Camera size={24} />
+          ابدأ المسح الآن
         </button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Session Header */}
-      <div className="bg-linear-to-br from-accent to-purple rounded-3xl p-8 text-white shadow-xl shadow-accent/20">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-white/80 text-sm font-bold">
-              <School size={18} />
-              لجنة {committee?.name} — {committee?.subject}
-            </div>
-            <h2 className="text-3xl font-display font-black">جلسة الاختبار نشطة</h2>
-            <div className="flex items-center gap-4 text-white/70 text-xs font-medium pt-2">
-              <span className="flex items-center gap-1"><Calendar size={14} /> {committee?.exam_date}</span>
-              <span className="flex items-center gap-1"><Clock size={14} /> {committee?.start_time} - {committee?.end_time}</span>
-            </div>
+    <div className="flex flex-col min-h-screen bg-bg -m-8 pb-24">
+      {/* App-like Header */}
+      <div className="sticky top-0 z-40 bg-card/80 backdrop-blur-xl border-b border-border px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-accent/10 text-accent rounded-2xl flex items-center justify-center">
+            <School size={20} />
           </div>
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex items-center gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-black">{students.length}</div>
-              <div className="text-[10px] uppercase font-bold opacity-60">إجمالي الطلاب</div>
-            </div>
-            <div className="w-px h-8 bg-white/20"></div>
-            <div className="text-center">
-              <div className="text-2xl font-black text-green-400">{presentCount}</div>
-              <div className="text-[10px] uppercase font-bold opacity-60">حاضر</div>
-            </div>
-            <div className="w-px h-8 bg-white/20"></div>
-            <div className="text-center">
-              <div className="text-2xl font-black text-red-400">{students.length - presentCount}</div>
-              <div className="text-[10px] uppercase font-bold opacity-60">غائب</div>
-            </div>
+          <div>
+            <h3 className="font-black text-sm">لجنة {committee.name}</h3>
+            <p className="text-[10px] text-text3 font-bold">{committee.subject}</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => {
+            setCommittee(null);
+            setStudents([]);
+            setIsScanning(true);
+          }}
+          className="p-2 bg-bg3 text-text3 rounded-xl hover:text-red transition-colors"
+        >
+          <RefreshCw size={18} />
+        </button>
+      </div>
+
+      {/* Stats Bar */}
+      <div className="px-6 py-6">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-card border border-border rounded-2xl p-4 text-center">
+            <div className="text-2xl font-black text-text">{students.length}</div>
+            <div className="text-[9px] uppercase font-bold text-text3">الطلاب</div>
+          </div>
+          <div className="bg-green/5 border border-green/20 rounded-2xl p-4 text-center">
+            <div className="text-2xl font-black text-green">{presentCount}</div>
+            <div className="text-[9px] uppercase font-bold text-green/60">حاضر</div>
+          </div>
+          <div className="bg-red/5 border border-red/20 rounded-2xl p-4 text-center">
+            <div className="text-2xl font-black text-red">{absentCount}</div>
+            <div className="text-[9px] uppercase font-bold text-red/60">غائب</div>
           </div>
         </div>
       </div>
 
-      {/* Student List */}
-      <div className="bg-card border border-border rounded-3xl overflow-hidden">
-        <div className="p-6 border-b border-border flex items-center justify-between">
-          <h3 className="font-bold text-sm flex items-center gap-2">
-            <Users size={18} className="text-accent" />
-            قائمة طلاب اللجنة (مرتبة حسب المرحلة)
-          </h3>
-          <div className="flex items-center gap-2 text-xs text-text3 bg-bg3 px-3 py-1.5 rounded-lg border border-border">
-            <AlertCircle size={14} className="text-gold" />
-            يتم الترتيب تلقائياً: أول ← ثاني ← ثالث
-          </div>
+      {/* Student List - Mobile Cards */}
+      <div className="px-6 space-y-4">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="font-black text-sm flex items-center gap-2">
+            <Users size={16} className="text-accent" />
+            قائمة التحضير
+          </h4>
+          <span className="text-[10px] font-bold text-text3 bg-bg3 px-2 py-1 rounded-lg">
+            الكل حاضر افتراضياً
+          </span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-sm">
-            <thead className="bg-bg3/50 text-text3 text-[10px] font-bold uppercase tracking-wider">
-              <tr>
-                <th className="px-6 py-4">المرحلة</th>
-                <th className="px-6 py-4">رقم الطالب</th>
-                <th className="px-6 py-4">اسم الطالب</th>
-                <th className="px-6 py-4">الفصل</th>
-                <th className="px-6 py-4">الحالة</th>
-                <th className="px-6 py-4">الإجراء</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {students.map((s, i) => (
-                <tr key={i} className="hover:bg-white/5 transition-colors">
-                  <td className="px-6 py-4">
-                    <span className={cn(
-                      "px-2 py-1 text-[10px] font-bold rounded-md border",
-                      (s.grade.includes('الأول')) && "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                      (s.grade.includes('الثاني')) && "bg-purple-500/10 text-purple-400 border-purple-500/20",
-                      (s.grade.includes('الثالث')) && "bg-gold/10 text-gold border-gold/20"
-                    )}>
-                      {s.grade}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 font-bold text-text">{s.student_no}</td>
-                  <td className="px-6 py-4 text-text2">{s.full_name}</td>
-                  <td className="px-6 py-4 text-text3 text-xs">{s.classroom}</td>
-                  <td className="px-6 py-4">
-                    <span className={cn(
-                      "text-[10px] font-bold px-2 py-1 rounded-full",
-                      attendance[s.id!] === 'present' ? "bg-green/10 text-green" : 
-                      attendance[s.id!] === 'absent' ? "bg-red/10 text-red" : "text-text3"
-                    )}>
-                      {attendance[s.id!] === 'present' ? 'حاضر' : 
-                       attendance[s.id!] === 'absent' ? 'غائب' : 'بانتظار التحضير'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => s.id && handleAttendance(s.id, 'present')}
-                        className={cn(
-                          "p-2 rounded-xl transition-all",
-                          attendance[s.id!] === 'present' ? "bg-green text-white" : "bg-green/10 text-green hover:bg-green hover:text-white"
-                        )}
-                      >
-                        <CheckCircle2 size={16} />
-                      </button>
-                      <button 
-                        onClick={() => s.id && handleAttendance(s.id, 'absent')}
-                        className={cn(
-                          "p-2 rounded-xl transition-all",
-                          attendance[s.id!] === 'absent' ? "bg-red text-white" : "bg-red/10 text-red hover:bg-red hover:text-white"
-                        )}
-                      >
-                        <XCircle size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+        <div className="space-y-3">
+          {students.map((s, i) => (
+            <div 
+              key={i} 
+              className={cn(
+                "bg-card border rounded-2xl p-4 flex items-center justify-between transition-all active:scale-[0.98]",
+                attendance[s.id!] === 'absent' ? "border-red/30 bg-red/5" : "border-border"
+              )}
+            >
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  "w-12 h-12 rounded-xl flex flex-col items-center justify-center font-black text-xs",
+                  (s.grade.includes('الأول')) && "bg-blue-500/10 text-blue-400",
+                  (s.grade.includes('الثاني')) && "bg-purple-500/10 text-purple-400",
+                  (s.grade.includes('الثالث')) && "bg-gold/10 text-gold"
+                )}>
+                  <span>{s.seat_no || s.student_no}</span>
+                  <span className="text-[8px] opacity-60">مقعد</span>
+                </div>
+                <div>
+                  <h5 className="font-bold text-sm text-text">{s.full_name}</h5>
+                  <p className="text-[10px] text-text3">{s.grade} — {s.classroom}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => s.id && handleAttendance(s.id, 'absent')}
+                  className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+                    attendance[s.id!] === 'absent' 
+                      ? "bg-red text-white shadow-lg shadow-red/30" 
+                      : "bg-red/10 text-red hover:bg-red/20"
+                  )}
+                >
+                  <XCircle size={20} />
+                </button>
+                <button 
+                  onClick={() => s.id && handleAttendance(s.id, 'present')}
+                  className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+                    attendance[s.id!] === 'present' 
+                      ? "bg-green text-white shadow-lg shadow-green/30" 
+                      : "bg-green/10 text-green hover:bg-green/20"
+                  )}
+                >
+                  <CheckCircle2 size={20} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
+      </div>
+
+      {/* Floating Action Button */}
+      <div className="fixed bottom-6 left-6 right-6 z-50">
+        <button 
+          onClick={() => {
+            setIsDelivering(true);
+            setIsScanning(true);
+          }}
+          className="w-full bg-linear-to-r from-accent to-purple text-white py-4 rounded-2xl font-black text-base shadow-2xl shadow-accent/30 flex items-center justify-center gap-2 active:scale-95 transition-all"
+        >
+          <Package size={20} />
+          تسليم المظروف للكنترول
+        </button>
       </div>
     </div>
   );

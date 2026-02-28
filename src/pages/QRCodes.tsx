@@ -8,7 +8,8 @@ import {
   School,
   Download,
   Info,
-  RefreshCw
+  RefreshCw,
+  ClipboardCheck
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { cn } from '../lib/utils';
@@ -212,6 +213,32 @@ export const QRCodes: React.FC = () => {
                 يُنصح بطباعة QR المظاريف على الورق اللاصق وإلصاقها على المظاريف الفعلية لتسهيل عملية المسح.
               </p>
             </div>
+          </div>
+
+          {/* Control Handover QR */}
+          <div className="bg-card border border-border rounded-2xl p-6 flex flex-col">
+            <h3 className="font-bold text-sm mb-6 flex items-center gap-2">
+              <ClipboardCheck size={18} className="text-green" />
+              QR استلام الكنترول
+            </h3>
+            <div className="space-y-4 flex-1">
+              <p className="text-[10px] text-text3 leading-relaxed">
+                يتم عرض هذا الرمز في مكتب الكنترول ليقوم المعلم بمسحه عند تسليم المظروف لتأكيد الاستلام آلياً.
+              </p>
+              
+              <div className="flex-1 flex flex-col items-center justify-center min-h-[200px] border border-border/50 rounded-2xl bg-bg/50">
+                <div className="animate-in zoom-in duration-300 text-center">
+                  <div className="bg-white p-4 rounded-xl mb-3">
+                    <QRCodeSVG value={JSON.stringify({ type: 'control_handover', timestamp: new Date().toISOString() })} size={120} />
+                  </div>
+                  <span className="text-[10px] font-bold text-text2">رمز استلام الكنترول الرسمي</span>
+                </div>
+              </div>
+            </div>
+            <button className="w-full mt-6 py-2.5 bg-bg3 border border-border rounded-xl text-xs font-bold text-text2 hover:text-text transition-all flex items-center justify-center gap-2">
+              <Printer size={16} />
+              طباعة الرمز للمكتب
+            </button>
           </div>
         </div>
       )}

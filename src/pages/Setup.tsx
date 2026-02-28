@@ -148,6 +148,31 @@ JOIN attendance a ON s.id = a.student_id
 JOIN committees c ON a.committee_id = c.id
 WHERE a.status = 'absent';
 
+DROP VIEW IF EXISTS v_envelope_tracking;
+CREATE OR REPLACE VIEW v_envelope_tracking AS
+SELECT 
+    e.id,
+    e.envelope_no,
+    e.status AS envelope_status,
+    c.name AS committee_name,
+    c.subject,
+    c.exam_date,
+    t.full_name AS teacher_name,
+    e.delivered_at,
+    e.created_at AS received_at
+FROM envelopes e
+LEFT JOIN committees c ON e.committee_id = c.id
+LEFT JOIN teachers t ON c.teacher_id = t.id;
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    type        TEXT        NOT NULL CHECK (type IN ('red','gold','green','blue')),
+    title       TEXT        NOT NULL,
+    body        TEXT        NOT NULL,
+    is_read     BOOLEAN     DEFAULT false,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
 -- 3. تفعيل RLS
 ALTER TABLE students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE teachers ENABLE ROW LEVEL SECURITY;
@@ -156,6 +181,7 @@ ALTER TABLE envelopes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE teacher_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE exam_schedules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow All" ON students FOR ALL USING (true);
 CREATE POLICY "Allow All" ON teachers FOR ALL USING (true);
@@ -164,6 +190,7 @@ CREATE POLICY "Allow All" ON envelopes FOR ALL USING (true);
 CREATE POLICY "Allow All" ON attendance FOR ALL USING (true);
 CREATE POLICY "Allow All" ON teacher_assignments FOR ALL USING (true);
 CREATE POLICY "Allow All" ON exam_schedules FOR ALL USING (true);
+CREATE POLICY "Allow All" ON alerts FOR ALL USING (true);
 `;
 
 export const Setup: React.FC = () => {

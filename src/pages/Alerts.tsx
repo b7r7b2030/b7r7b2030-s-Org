@@ -26,9 +26,10 @@ export const Alerts: React.FC = () => {
   const fetchAlerts = async () => {
     setLoading(true);
     try {
-      const [absentData, envelopeData] = await Promise.all([
+      const [absentData, envelopeData, manualAlerts] = await Promise.all([
         sbFetch<any>('v_absent_students', 'GET', null, '?select=*'),
-        sbFetch<any>('envelopes', 'GET', null, '?status=neq.delivered&select=*,committees(name)')
+        sbFetch<any>('envelopes', 'GET', null, '?status=neq.delivered&select=*,committees(name)'),
+        sbFetch<any>('alerts', 'GET', null, '?order=created_at.desc&limit=20')
       ]);
 
       const formattedAlerts: any[] = [];
@@ -42,7 +43,8 @@ export const Alerts: React.FC = () => {
             title: `غياب: ${a.full_name}`,
             desc: `اللجنة: ${a.committee_name} | الصف: ${a.grade} | الفصل: ${a.classroom}`,
             time: a.recorded_at ? new Date(a.recorded_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد',
-            phone: a.phone
+            phone: a.phone,
+            created_at: a.recorded_at
           });
         });
       }
@@ -55,14 +57,32 @@ export const Alerts: React.FC = () => {
             category: 'delay',
             title: `تأخر استلام مظروف — ${e.envelope_no}`,
             desc: `اللجنة: ${e.committees?.name || 'غير محدد'} | الحالة: ${e.status === 'pending' ? 'لم يستلم' : 'قيد الاختبار'}`,
-            time: e.updated_at ? new Date(e.updated_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد'
+            time: e.updated_at ? new Date(e.updated_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد',
+            created_at: e.updated_at
           });
         });
       }
 
-      // Sort by time (most recent first) - this is a bit tricky with formatted strings, 
-      // but in a real app we'd sort the raw data first.
-      setAlerts(formattedAlerts);
+      if (manualAlerts) {
+        manualAlerts.forEach((ma: any) => {
+          formattedAlerts.push({
+            id: `manual-${ma.id}`,
+            type: ma.type,
+            category: ma.type === 'red' ? 'absent' : 'delay',
+            title: ma.title,
+            desc: ma.body,
+            time: ma.created_at ? new Date(ma.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد',
+            created_at: ma.created_at
+          });
+        });
+      }
+
+      // Sort by created_at (most recent first)
+      const sorted = formattedAlerts.sort((a, b) => {
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      });
+
+      setAlerts(sorted);
     } catch (error) {
       console.error("Error fetching alerts:", error);
     } finally {
