@@ -24,6 +24,7 @@ import { sbFetch } from '../services/supabase';
 export const Teachers: React.FC = () => {
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
   const [formData, setFormData] = useState({
@@ -52,11 +53,23 @@ export const Teachers: React.FC = () => {
       return;
     }
 
-    const res = await sbFetch<Staff>('staff', 'POST', formData);
-    if (res) {
-      alert('تم إضافة الموظف بنجاح');
-      setFormData({ national_id: '', full_name: '', phone: '', role: UserRole.TEACHER });
-      fetchStaff();
+    setAdding(true);
+    console.log('Attempting to add staff:', formData);
+    try {
+      const res = await sbFetch<Staff>('staff', 'POST', formData);
+      console.log('Response from sbFetch:', res);
+      if (res && res.length > 0) {
+        alert('تم إضافة الموظف بنجاح');
+        setFormData({ national_id: '', full_name: '', phone: '', role: UserRole.TEACHER });
+        fetchStaff();
+      } else {
+        alert('حدث خطأ أثناء إضافة الموظف. قد يكون السجل المدني مسجلاً مسبقاً أو هناك مشكلة في الاتصال بالخادم.');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('حدث خطأ غير متوقع');
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -149,10 +162,20 @@ export const Teachers: React.FC = () => {
           </div>
           <button 
             onClick={handleAddStaff}
-            className="w-full mt-6 bg-accent text-white font-bold py-3 rounded-xl hover:bg-accent/90 transition-all flex items-center justify-center gap-2"
+            disabled={adding}
+            className="w-full mt-6 bg-accent text-white font-bold py-3 rounded-xl hover:bg-accent/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Plus size={18} />
-            إضافة للطاقم وتفعيل الكود
+            {adding ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                جاري الإضافة...
+              </>
+            ) : (
+              <>
+                <Plus size={18} />
+                إضافة للطاقم وتفعيل الكود
+              </>
+            )}
           </button>
         </div>
 
