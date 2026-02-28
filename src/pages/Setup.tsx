@@ -98,6 +98,21 @@ CREATE TABLE IF NOT EXISTS attendance (
     UNIQUE (committee_id, student_id)
 );
 
+CREATE TABLE IF NOT EXISTS staff (
+    id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    national_id     TEXT        UNIQUE NOT NULL,
+    full_name       TEXT        NOT NULL,
+    phone           TEXT,
+    role            TEXT        NOT NULL CHECK (role IN ('PRINCIPAL', 'TEACHER', 'COUNSELOR', 'CONTROL')),
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- إضافة حساب المدير الافتراضي (يمكن للمدير تغييره لاحقاً)
+INSERT INTO staff (national_id, full_name, role)
+VALUES ('1234567890', 'مدير النظام', 'PRINCIPAL')
+ON CONFLICT (national_id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS exam_schedules (
     id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     exam_date     DATE        NOT NULL,
@@ -182,7 +197,20 @@ ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE teacher_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE exam_schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE staff ENABLE ROW LEVEL SECURITY;
 
+-- حذف السياسات القديمة إن وجدت لتجنب الأخطاء
+DROP POLICY IF EXISTS "Allow All" ON students;
+DROP POLICY IF EXISTS "Allow All" ON teachers;
+DROP POLICY IF EXISTS "Allow All" ON committees;
+DROP POLICY IF EXISTS "Allow All" ON envelopes;
+DROP POLICY IF EXISTS "Allow All" ON attendance;
+DROP POLICY IF EXISTS "Allow All" ON teacher_assignments;
+DROP POLICY IF EXISTS "Allow All" ON exam_schedules;
+DROP POLICY IF EXISTS "Allow All" ON alerts;
+DROP POLICY IF EXISTS "Allow All" ON staff;
+
+-- إنشاء السياسات الجديدة
 CREATE POLICY "Allow All" ON students FOR ALL USING (true);
 CREATE POLICY "Allow All" ON teachers FOR ALL USING (true);
 CREATE POLICY "Allow All" ON committees FOR ALL USING (true);
@@ -191,6 +219,7 @@ CREATE POLICY "Allow All" ON attendance FOR ALL USING (true);
 CREATE POLICY "Allow All" ON teacher_assignments FOR ALL USING (true);
 CREATE POLICY "Allow All" ON exam_schedules FOR ALL USING (true);
 CREATE POLICY "Allow All" ON alerts FOR ALL USING (true);
+CREATE POLICY "Allow All" ON staff FOR ALL USING (true);
 `;
 
 export const Setup: React.FC = () => {

@@ -9,7 +9,17 @@ export interface User {
   id: string;
   name: string;
   role: UserRole;
-  teacher_id?: string; // For teachers to link to their records
+  national_id: string;
+  phone?: string;
+}
+
+export interface Staff {
+  id?: string;
+  national_id: string;
+  full_name: string;
+  phone: string;
+  role: UserRole;
+  created_at?: string;
 }
 
 export interface ExamSchedule {

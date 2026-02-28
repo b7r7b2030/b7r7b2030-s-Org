@@ -28,6 +28,7 @@ interface SidebarProps {
   setActivePage: (page: string) => void;
   alertCount: number;
   userRole: UserRole;
+  userName?: string;
   onLogout: () => void;
 }
 
@@ -36,6 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActivePage, 
   alertCount, 
   userRole,
+  userName,
   onLogout
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -45,7 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.COUNSELOR, UserRole.CONTROL] },
     { id: 'alerts', label: 'التنبيهات', icon: Bell, badge: alertCount, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR, UserRole.CONTROL] },
     { id: 'students', label: 'الطلاب', icon: Users, roles: [UserRole.PRINCIPAL] },
-    { id: 'teachers', label: 'المعلمون', icon: UserSquare2, roles: [UserRole.PRINCIPAL] },
+    { id: 'teachers', label: 'طاقم العمل', icon: UserSquare2, roles: [UserRole.PRINCIPAL] },
     { id: 'committees', label: 'اللجان', icon: School, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.CONTROL] },
     { id: 'teacherassignment', label: 'توزيع المعلمين', icon: Users, roles: [UserRole.PRINCIPAL] },
     { id: 'envelopes', label: 'المظاريف', icon: Package, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.CONTROL] },
@@ -155,7 +157,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {getRoleIcon()}
             </div>
             <div className="flex-1 overflow-hidden">
-              <h4 className="text-xs font-bold text-text truncate">المستخدم</h4>
+              <h4 className="text-xs font-bold text-text truncate">{userName || 'المستخدم'}</h4>
               <span className="text-[10px] text-text3">{getRoleLabel()}</span>
             </div>
           </div>

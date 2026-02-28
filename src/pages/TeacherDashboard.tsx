@@ -18,14 +18,15 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { QRScanner } from '../components/QRScanner';
-import { Student, Committee, AttendanceRecord } from '../types';
+import { Student, Committee, AttendanceRecord, User } from '../types';
 import { sbFetch } from '../services/supabase';
 
 interface TeacherDashboardProps {
   onLogout?: () => void;
+  user: User;
 }
 
-export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout }) => {
+export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, user }) => {
   const [isScanning, setIsScanning] = useState(true);
   const [loading, setLoading] = useState(false);
   const [committee, setCommittee] = useState<Committee | null>(null);
@@ -148,6 +149,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout }) 
               const defaultAttendance = sorted.map(s => ({
                 student_id: s.id,
                 committee_id: currentCommittee.id,
+                teacher_id: user.id,
                 status: 'present',
                 recorded_at: new Date().toISOString()
               }));
@@ -197,6 +199,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout }) 
       res = await sbFetch<AttendanceRecord>('attendance', 'POST', {
         student_id: studentId,
         committee_id: committee.id,
+        teacher_id: user.id,
         status: status,
         recorded_at: new Date().toISOString()
       });

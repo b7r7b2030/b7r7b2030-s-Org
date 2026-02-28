@@ -19,10 +19,10 @@ import {
   Tooltip
 } from 'recharts';
 import { cn } from '../lib/utils';
-import { Student, Committee, UserRole } from '../types';
+import { Student, Committee, UserRole, User } from '../types';
 import { sbFetch } from '../services/supabase';
 
-export const Attendance: React.FC<{ userRole?: UserRole }> = ({ userRole }) => {
+export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ userRole, user }) => {
   const [students, setStudents] = useState<Student[]>([]);
   const [committees, setCommittees] = useState<Committee[]>([]);
   const [absentStudents, setAbsentStudents] = useState<any[]>([]);
@@ -77,6 +77,7 @@ export const Attendance: React.FC<{ userRole?: UserRole }> = ({ userRole }) => {
     const res = await sbFetch('attendance', 'POST', {
       student_id: studentId,
       committee_id: committeeId,
+      teacher_id: user.id,
       status: status,
       recorded_at: new Date().toISOString()
     });

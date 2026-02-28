@@ -41,13 +41,22 @@ export const TeacherAssignment: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     const [tData, cData, aData, sData] = await Promise.all([
-      sbFetch<Teacher>('teachers', 'GET', null, '?select=*&order=full_name'),
+      sbFetch<any>('staff', 'GET', null, '?select=*&role=eq.TEACHER&order=full_name'),
       sbFetch<Committee>('committees', 'GET', null, '?select=*&order=name'),
       sbFetch<Assignment>('teacher_assignments', 'GET', null, '?select=*'),
       sbFetch<ExamSchedule>('exam_schedules', 'GET', null, '?select=*')
     ]);
     
-    if (tData) setTeachers(tData);
+    if (tData) {
+      // Map staff to teacher structure for compatibility
+      const mappedTeachers = tData.map((s: any) => ({
+        id: s.id,
+        teacher_no: s.national_id,
+        full_name: s.full_name,
+        phone: s.phone
+      }));
+      setTeachers(mappedTeachers);
+    }
     if (cData) {
       const sorted = [...cData].sort((a, b) => 
         a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })

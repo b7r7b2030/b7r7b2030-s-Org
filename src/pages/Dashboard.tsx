@@ -49,7 +49,7 @@ export const Dashboard: React.FC = () => {
   const fetchStats = async () => {
     const [sData, tData, aData, cStats, eData, absentData] = await Promise.all([
       sbFetch<any>('students', 'GET', null, '?select=id'),
-      sbFetch<any>('teachers', 'GET', null, '?select=id'),
+      sbFetch<any>('staff', 'GET', null, '?select=id'),
       sbFetch<any>('attendance', 'GET', null, '?select=id,status,recorded_at'),
       sbFetch<any>('v_committee_summary', 'GET', null, '?select=*'),
       sbFetch<any>('envelopes', 'GET', null, '?select=status,envelope_no,updated_at,committees(name)'),
@@ -57,13 +57,13 @@ export const Dashboard: React.FC = () => {
     ]);
 
     const totalStudents = sData?.length || 0;
-    const totalTeachers = tData?.length || 0;
+    const totalStaff = tData?.length || 0;
     const presentCount = aData?.filter((a: any) => a.status === 'present').length || 0;
     const absentCount = aData?.filter((a: any) => a.status === 'absent').length || 0;
 
     setStats([
       { label: 'إجمالي الطلاب', value: totalStudents.toLocaleString(), icon: Users, color: 'blue', change: 'محدث', trend: 'up' },
-      { label: 'المعلمون المراقبون', value: totalTeachers.toLocaleString(), icon: UserSquare2, color: 'gold', change: 'نشط', trend: 'up' },
+      { label: 'طاقم العمل', value: totalStaff.toLocaleString(), icon: UserSquare2, color: 'gold', change: 'نشط', trend: 'up' },
       { label: 'الحاضرون اليوم', value: presentCount.toLocaleString(), icon: CheckCircle2, color: 'green', change: `${totalStudents > 0 ? Math.round((presentCount/totalStudents)*100) : 0}%`, trend: 'up' },
       { label: 'الغائبون اليوم', value: absentCount.toLocaleString(), icon: XCircle, color: 'red', change: `${totalStudents > 0 ? Math.round((absentCount/totalStudents)*100) : 0}%`, trend: 'down' },
     ]);

@@ -27,10 +27,11 @@ import {
   Calendar as CalendarIcon
 } from 'lucide-react';
 import { cn } from './lib/utils';
-import { UserRole } from './types';
+import { UserRole, User } from './types';
 
 export default function App() {
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const userRole = user?.role || null;
   const [activePage, setActivePage] = useState('dashboard');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [alertCount, setAlertCount] = useState(4);
@@ -56,8 +57,11 @@ export default function App() {
   }, [userRole]);
 
   // If no role is selected, show role selector
-  if (!userRole) {
-    return <RoleSelector onSelect={(role) => setUserRole(role)} />;
+  if (!user) {
+    return <RoleSelector onSelect={(u) => {
+      setUser(u);
+      if (u.id === 'setup') setActivePage('setup');
+    }} />;
   }
 
   // Page title mapping
@@ -65,7 +69,7 @@ export default function App() {
     dashboard: { title: 'لوحة التحكم', subtitle: 'نظرة شاملة على عمليات الاختبارات' },
     alerts: { title: 'مركز التنبيهات', subtitle: 'جميع التنبيهات والإشعارات الفورية' },
     students: { title: 'إدارة الطلاب', subtitle: 'استيراد وإدارة بيانات الطلاب وربطهم باللجان' },
-    teachers: { title: 'إدارة المعلمين', subtitle: 'إدارة بيانات المعلمين المراقبين ورموز QR' },
+    teachers: { title: 'إدارة طاقم العمل', subtitle: 'إدارة بيانات الموظفين، المعلمين، والصلاحيات' },
     committees: { title: 'إدارة اللجان', subtitle: 'إنشاء وإدارة لجان الاختبارات وربطها بالمعلمين والطلاب' },
     envelopes: { title: 'تتبع المظاريف', subtitle: 'خط زمني كامل لكل مظروف من الإنشاء حتى التسليم النهائي' },
     attendance: { title: 'الحضور والغياب', subtitle: 'سجلات حضور وغياب الطلاب مع إمكانية الإشعار الفوري' },
@@ -80,7 +84,7 @@ export default function App() {
   const renderPage = () => {
     // Special case for teacher dashboard
     if (userRole === UserRole.TEACHER && activePage === 'dashboard') {
-      return <TeacherDashboard />;
+      return <TeacherDashboard onLogout={handleLogout} user={user!} />;
     }
 
     // Special case for control dashboard
@@ -95,7 +99,7 @@ export default function App() {
       case 'committees': return <Committees />;
       case 'envelopes': return <Envelopes userRole={userRole} />;
       case 'attendance': 
-        return (userRole === UserRole.TEACHER || userRole === UserRole.CONTROL) ? <TeacherDashboard /> : <Attendance userRole={userRole} />;
+        return (userRole === UserRole.TEACHER || userRole === UserRole.CONTROL) ? <TeacherDashboard onLogout={handleLogout} user={user!} /> : <Attendance userRole={userRole} user={user!} />;
       case 'qrcodes': return <QRCodes />;
       case 'alerts': return <Alerts />;
       case 'reports': return <Reports />;
@@ -118,7 +122,7 @@ export default function App() {
 
   const handleLogout = () => {
     if (confirm('هل أنت متأكد من تسجيل الخروج؟')) {
-      setUserRole(null);
+      setUser(null);
       setActivePage('dashboard');
     }
   };
@@ -146,6 +150,7 @@ export default function App() {
           setActivePage={setActivePage} 
           alertCount={alertCount} 
           userRole={userRole}
+          userName={user?.name}
           onLogout={handleLogout}
         />
       </div>
