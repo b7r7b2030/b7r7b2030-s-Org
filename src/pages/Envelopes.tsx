@@ -95,6 +95,8 @@ export const Envelopes: React.FC<EnvelopesProps> = ({ userRole }) => {
 
   useEffect(() => {
     fetchEnvelopes();
+    const interval = setInterval(fetchEnvelopes, 5000); // Poll every 5 seconds for "real-time" feel
+    return () => clearInterval(interval);
   }, []);
 
   const fetchEnvelopes = async () => {
@@ -129,12 +131,11 @@ export const Envelopes: React.FC<EnvelopesProps> = ({ userRole }) => {
         if (!env) throw new Error('المظروف غير موجود في النظام.');
 
         // Update status to delivered
-        const res = await sbFetch('envelopes', 'POST', {
-          envelope_no: envelopeNo,
+        const res = await sbFetch('envelopes', 'PATCH', {
           status: 'delivered',
           delivered_at: new Date().toISOString(),
           notes: 'تم الاستلام في الكنترول عبر المسح المباشر'
-        });
+        }, `?envelope_no=eq.${envelopeNo}`);
 
         if (res) {
           alert(`تم استلام المظروف رقم ${envelopeNo} بنجاح.`);

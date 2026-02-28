@@ -13,14 +13,19 @@ import {
   Loader2,
   RefreshCw,
   QrCode,
-  ClipboardCheck
+  ClipboardCheck,
+  LogOut
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { QRScanner } from '../components/QRScanner';
 import { Student, Committee, AttendanceRecord } from '../types';
 import { sbFetch } from '../services/supabase';
 
-export const TeacherDashboard: React.FC = () => {
+interface TeacherDashboardProps {
+  onLogout?: () => void;
+}
+
+export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout }) => {
   const [isScanning, setIsScanning] = useState(true);
   const [loading, setLoading] = useState(false);
   const [committee, setCommittee] = useState<Committee | null>(null);
@@ -91,31 +96,6 @@ export const TeacherDashboard: React.FC = () => {
         throw new Error('رمز QR غير صالح. يرجى استخدام الرموز المولدة من النظام.');
       }
 
-      // Handle Envelope Handover to Control
-      if (isDelivering) {
-        if (parsed.type === 'control_handover') {
-          if (!committee) throw new Error('يرجى مسح اللجنة أولاً.');
-          
-          // Update envelope status in DB
-          const envRes = await sbFetch('envelopes', 'POST', {
-            committee_id: committee.id,
-            status: 'delivered',
-            delivered_at: new Date().toISOString(),
-            notes: 'تم التسليم للكنترول عبر المسح'
-          });
-
-          if (envRes) {
-            alert('تم تسليم المظروف للكنترول بنجاح. شكراً لك.');
-            setCommittee(null);
-            setStudents([]);
-            setIsDelivering(false);
-            return;
-          }
-        } else {
-          throw new Error('يرجى مسح رمز "استلام الكنترول" الخاص بمكتب الكنترول.');
-        }
-      }
-
       if (parsed.type === 'teacher_committee' || parsed.type === 'envelope' || parsed.type === 'committee') {
         const committeeId = parsed.id;
         const committeeName = parsed.name || parsed.committee;
@@ -131,6 +111,12 @@ export const TeacherDashboard: React.FC = () => {
         if (cData && cData.length > 0) {
           const currentCommittee = cData[0];
           setCommittee(currentCommittee);
+
+          // Update envelope status to 'in_progress' immediately when teacher starts
+          await sbFetch('envelopes', 'PATCH', {
+            status: 'in_progress',
+            updated_at: new Date().toISOString()
+          }, `?committee_id=eq.${currentCommittee.id}`);
           
           // Fetch students for this committee
           const sData = await sbFetch<Student>('students', 'GET', null, `?committee_name=eq.${currentCommittee.name}`);
@@ -275,13 +261,25 @@ export const TeacherDashboard: React.FC = () => {
             لبدء عملية تحضير الطلاب، يرجى مسح رمز QR الموجود على باب اللجنة أو المظروف.
           </p>
         </div>
-        <button 
-          onClick={() => setIsScanning(true)}
-          className="w-full max-w-xs flex items-center justify-center gap-3 bg-accent text-white py-5 rounded-3xl font-black text-lg shadow-2xl shadow-accent/40 active:scale-95 transition-all"
-        >
-          <Camera size={24} />
-          ابدأ المسح الآن
-        </button>
+        <div className="w-full max-w-xs space-y-4">
+          <button 
+            onClick={() => setIsScanning(true)}
+            className="w-full flex items-center justify-center gap-3 bg-accent text-white py-5 rounded-3xl font-black text-lg shadow-2xl shadow-accent/40 active:scale-95 transition-all"
+          >
+            <Camera size={24} />
+            ابدأ المسح الآن
+          </button>
+          
+          {onLogout && (
+            <button 
+              onClick={onLogout}
+              className="w-full flex items-center justify-center gap-2 text-text3 hover:text-red transition-colors py-2"
+            >
+              <LogOut size={18} />
+              تسجيل الخروج
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -299,16 +297,28 @@ export const TeacherDashboard: React.FC = () => {
             <p className="text-[10px] text-text3 font-bold">{committee.subject}</p>
           </div>
         </div>
-        <button 
-          onClick={() => {
-            setCommittee(null);
-            setStudents([]);
-            setIsScanning(true);
-          }}
-          className="p-2 bg-bg3 text-text3 rounded-xl hover:text-red transition-colors"
-        >
-          <RefreshCw size={18} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              setCommittee(null);
+              setStudents([]);
+              setIsScanning(true);
+            }}
+            className="p-2 bg-bg3 text-text3 rounded-xl hover:text-accent transition-colors"
+            title="مسح جديد"
+          >
+            <QrCode size={18} />
+          </button>
+          {onLogout && (
+            <button 
+              onClick={onLogout}
+              className="p-2 bg-red/10 text-red rounded-xl border border-red/20 hover:bg-red hover:text-white transition-all"
+              title="تسجيل الخروج"
+            >
+              <LogOut size={18} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Stats Bar */}
@@ -399,13 +409,16 @@ export const TeacherDashboard: React.FC = () => {
       <div className="fixed bottom-6 left-6 right-6 z-50">
         <button 
           onClick={() => {
-            setIsDelivering(true);
-            setIsScanning(true);
+            if (confirm('هل أنت متأكد من إنهاء الاختبار وتسليم المظروف للكنترول؟ سيتم إغلاق هذه الصفحة والعودة لمسح QR جديد.')) {
+              setCommittee(null);
+              setStudents([]);
+              setIsScanning(true);
+            }
           }}
           className="w-full bg-linear-to-r from-accent to-purple text-white py-4 rounded-2xl font-black text-base shadow-2xl shadow-accent/30 flex items-center justify-center gap-2 active:scale-95 transition-all"
         >
-          <Package size={20} />
-          تسليم المظروف للكنترول
+          <CheckCircle2 size={20} />
+          إنهاء الاختبار وتسليم المظروف
         </button>
       </div>
     </div>

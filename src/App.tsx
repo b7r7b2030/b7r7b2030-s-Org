@@ -116,6 +116,21 @@ export default function App() {
 
   const filteredAddOptions = addOptions.filter(opt => opt.roles.includes(userRole));
 
+  const handleLogout = () => {
+    if (confirm('هل أنت متأكد من تسجيل الخروج؟')) {
+      setUserRole(null);
+      setActivePage('dashboard');
+    }
+  };
+
+  if (userRole === UserRole.TEACHER) {
+    return (
+      <div className="min-h-screen bg-bg" dir="rtl">
+        <TeacherDashboard onLogout={handleLogout} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-bg text-text selection:bg-accent/30" dir="rtl">
       {/* Background Glows */}
@@ -125,21 +140,18 @@ export default function App() {
         <div className="absolute top-[40%] left-[40%] w-[20%] h-[20%] bg-gold/5 blur-[100px] rounded-full"></div>
       </div>
 
-      <div className={cn("print:hidden", (userRole === UserRole.TEACHER && activePage === 'dashboard') && "hidden lg:block")}>
+      <div className="print:hidden">
         <Sidebar 
           activePage={activePage} 
           setActivePage={setActivePage} 
           alertCount={alertCount} 
           userRole={userRole}
-          onLogout={() => setUserRole(null)}
+          onLogout={handleLogout}
         />
       </div>
 
-      <main className={cn(
-        "lg:mr-64 min-h-screen flex flex-col relative z-10 pb-20 lg:pb-0 print:mr-0 print:pb-0",
-        (userRole === UserRole.TEACHER && activePage === 'dashboard') && "pb-0 lg:pb-0"
-      )}>
-        <div className={cn("print:hidden", (userRole === UserRole.TEACHER && activePage === 'dashboard') && "hidden lg:block")}>
+      <main className="lg:mr-64 min-h-screen flex flex-col relative z-10 pb-20 lg:pb-0 print:mr-0 print:pb-0">
+        <div className="print:hidden">
           <Topbar 
             title={pageInfo[activePage]?.title || activePage}
             subtitle={pageInfo[activePage]?.subtitle || ''}
@@ -150,10 +162,7 @@ export default function App() {
           />
         </div>
 
-        <div className={cn(
-          "flex-1 p-8 max-w-7xl mx-auto w-full print:p-0 print:max-w-none",
-          (userRole === UserRole.TEACHER && activePage === 'dashboard') && "p-0 lg:p-8 max-w-none"
-        )}>
+        <div className="flex-1 p-8 max-w-7xl mx-auto w-full print:p-0 print:max-w-none">
           {renderPage()}
         </div>
 
