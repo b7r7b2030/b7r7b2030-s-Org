@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, RefreshCw, QrCode, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import jsQR from 'jsqr';
 
 interface QRScannerProps {
   onScan: (data: string) => void;
@@ -11,12 +12,16 @@ interface QRScannerProps {
 export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, title }) => {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scanning, setScanning] = useState(true);
 
   useEffect(() => {
+    let stream: MediaStream | null = null;
+    let animationFrameId: number;
+
     async function setupCamera() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        stream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: 'environment' } 
         });
         if (videoRef.current) {
@@ -31,25 +36,42 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, title }) 
 
     setupCamera();
 
-    return () => {
-      if (videoRef.current?.srcObject) {
-        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-        tracks.forEach(track => track.stop());
+    const scan = () => {
+      if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA && canvasRef.current) {
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        if (context) {
+          canvas.height = videoRef.current.videoHeight;
+          canvas.width = videoRef.current.videoWidth;
+          context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
+
+          if (code) {
+            onScan(code.data);
+            setScanning(false);
+            return;
+          }
+        }
+      }
+      if (scanning) {
+        animationFrameId = requestAnimationFrame(scan);
       }
     };
-  }, []);
 
-  // Simulate a scan after 3 seconds for demo purposes
-  useEffect(() => {
     if (hasPermission) {
-      const timer = setTimeout(() => {
-        // In a real app, we'd use a library like jsQR to decode the frame
-        // Here we simulate scanning "ENV-002"
-        onScan("ENV-002");
-      }, 3000);
-      return () => clearTimeout(timer);
+      animationFrameId = requestAnimationFrame(scan);
     }
-  }, [hasPermission, onScan]);
+
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [hasPermission, onScan, scanning]);
 
   return (
     <div className="fixed inset-0 z-[200] bg-black flex flex-col">
@@ -61,6 +83,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, title }) 
       </div>
 
       <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+        <canvas ref={canvasRef} className="hidden" />
         {hasPermission === false ? (
           <div className="text-center p-8 space-y-4">
             <div className="w-20 h-20 bg-red/20 text-red rounded-full flex items-center justify-center mx-auto">
@@ -97,7 +120,7 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, title }) 
             <div className="absolute bottom-20 left-0 right-0 text-center px-8">
               <div className="bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-4 inline-flex items-center gap-3">
                 <RefreshCw size={18} className="text-accent animate-spin" />
-                <span className="text-white text-sm font-medium">جاري البحث عن رمز QR للمظروف...</span>
+                <span className="text-white text-sm font-medium">جاري البحث عن رمز QR...</span>
               </div>
             </div>
           </>

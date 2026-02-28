@@ -42,15 +42,31 @@ export const TeacherDashboard: React.FC = () => {
     setIsScanning(false);
     
     try {
-      const parsed = JSON.parse(data);
-      if (parsed.type === 'committee' || parsed.type === 'envelope') {
+      let parsed;
+      try {
+        parsed = JSON.parse(data);
+      } catch (e) {
+        throw new Error('رمز QR غير صالح. يرجى استخدام الرموز المولدة من النظام.');
+      }
+
+      if (parsed.type === 'teacher_committee' || parsed.type === 'envelope' || parsed.type === 'committee') {
+        const committeeId = parsed.id;
+        const committeeName = parsed.name || parsed.committee;
+
+        if (!committeeId && !committeeName) {
+          throw new Error('بيانات اللجنة ناقصة في رمز QR.');
+        }
+
         // Fetch committee details
-        const cData = await sbFetch<Committee>('committees', 'GET', null, `?id=eq.${parsed.id}`);
+        let query = committeeId ? `?id=eq.${committeeId}` : `?name=eq.${committeeName}`;
+        const cData = await sbFetch<Committee>('committees', 'GET', null, query);
+        
         if (cData && cData.length > 0) {
-          setCommittee(cData[0]);
+          const currentCommittee = cData[0];
+          setCommittee(currentCommittee);
           
           // Fetch students for this committee
-          const sData = await sbFetch<Student>('students', 'GET', null, `?committee_name=eq.${cData[0].name}`);
+          const sData = await sbFetch<Student>('students', 'GET', null, `?committee_name=eq.${currentCommittee.name}`);
           if (sData) {
             const sorted = [...sData].sort((a, b) => {
               const orderA = gradeOrder[a.grade] || 99;
@@ -61,24 +77,24 @@ export const TeacherDashboard: React.FC = () => {
             setStudents(sorted);
             
             // Fetch existing attendance
-            const aData = await sbFetch<any>('attendance', 'GET', null, `?committee_id=eq.${cData[0].id}`);
+            const aData = await sbFetch<any>('attendance', 'GET', null, `?committee_id=eq.${currentCommittee.id}`);
             if (aData) {
               const attMap: any = {};
               aData.forEach((a: any) => attMap[a.student_id] = a.status);
               setAttendance(attMap);
             }
+          } else {
+            setStudents([]);
           }
         } else {
-          alert('لجنة غير موجودة في قاعدة البيانات');
-          setIsScanning(true);
+          throw new Error('اللجنة غير موجودة في قاعدة البيانات. يرجى التأكد من مزامنة اللجان.');
         }
       } else {
-        alert('رمز QR غير صالح');
-        setIsScanning(true);
+        throw new Error('نوع رمز QR غير مدعوم في هذه الصفحة. يرجى مسح رمز اللجنة أو المظروف.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Scan error:", error);
-      alert('خطأ في قراءة رمز QR. تأكد من جودة الصورة.');
+      alert(error.message || 'خطأ في قراءة رمز QR. تأكد من جودة الصورة والبيانات.');
       setIsScanning(true);
     } finally {
       setLoading(false);

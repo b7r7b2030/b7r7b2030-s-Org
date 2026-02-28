@@ -21,6 +21,7 @@ export const QRCodes: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedCommittee, setSelectedCommittee] = useState('');
+  const [selectedEnvelope, setSelectedEnvelope] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -96,11 +97,11 @@ export const QRCodes: React.FC = () => {
             </button>
           </div>
 
-          {/* Envelope QR */}
+          {/* Committee QR */}
           <div className="bg-card border border-border rounded-2xl p-6 flex flex-col">
             <h3 className="font-bold text-sm mb-6 flex items-center gap-2">
-              <Package size={18} className="text-gold" />
-              QR مظروف
+              <School size={18} className="text-accent" />
+              QR لجنة
             </h3>
             <div className="space-y-4 flex-1">
               <div className="space-y-1.5">
@@ -112,7 +113,7 @@ export const QRCodes: React.FC = () => {
                 >
                   <option value="">— اختر —</option>
                   {committees.map(c => (
-                    <option key={c.id} value={JSON.stringify({ type: 'envelope', committee: c.name })}>
+                    <option key={c.id} value={JSON.stringify({ type: 'teacher_committee', id: c.id, name: c.name })}>
                       لجنة {c.name}
                     </option>
                   ))}
@@ -125,7 +126,52 @@ export const QRCodes: React.FC = () => {
                     <div className="bg-white p-4 rounded-xl mb-3">
                       <QRCodeSVG value={selectedCommittee} size={120} />
                     </div>
-                    <span className="text-[10px] font-bold text-text2">مظروف لجنة {JSON.parse(selectedCommittee).committee}</span>
+                    <span className="text-[10px] font-bold text-text2">لجنة {JSON.parse(selectedCommittee).name}</span>
+                  </div>
+                ) : (
+                  <div className="text-center opacity-30">
+                    <School size={48} className="mx-auto mb-2" />
+                    <p className="text-[10px] font-medium">اختر لجنة أولاً</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <button className="w-full mt-6 py-2.5 bg-bg3 border border-border rounded-xl text-xs font-bold text-text2 hover:text-text transition-all flex items-center justify-center gap-2">
+              <Printer size={16} />
+              طباعة الرمز
+            </button>
+          </div>
+
+          {/* Envelope QR */}
+          <div className="bg-card border border-border rounded-2xl p-6 flex flex-col">
+            <h3 className="font-bold text-sm mb-6 flex items-center gap-2">
+              <Package size={18} className="text-gold" />
+              QR مظروف
+            </h3>
+            <div className="space-y-4 flex-1">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text2">اختر اللجنة</label>
+                <select 
+                  className="w-full bg-bg3 border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-accent"
+                  value={selectedEnvelope}
+                  onChange={(e) => setSelectedEnvelope(e.target.value)}
+                >
+                  <option value="">— اختر —</option>
+                  {committees.map(c => (
+                    <option key={c.id} value={JSON.stringify({ type: 'envelope', id: c.id, committee: c.name })}>
+                      مظروف لجنة {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="flex-1 flex flex-col items-center justify-center min-h-[200px] border border-border/50 rounded-2xl bg-bg/50">
+                {selectedEnvelope ? (
+                  <div className="animate-in zoom-in duration-300 text-center">
+                    <div className="bg-white p-4 rounded-xl mb-3">
+                      <QRCodeSVG value={selectedEnvelope} size={120} />
+                    </div>
+                    <span className="text-[10px] font-bold text-text2">مظروف لجنة {JSON.parse(selectedEnvelope).committee}</span>
                   </div>
                 ) : (
                   <div className="text-center opacity-30">
