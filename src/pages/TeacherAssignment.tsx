@@ -265,11 +265,10 @@ export const TeacherAssignment: React.FC = () => {
       }, "*");
     };
 
-    // Try sending immediately and then after a short delay to ensure extension is ready
+    // إرسال الأمر مرة واحدة فقط
     sendData();
-    setTimeout(sendData, 500);
     
-    alert(`تم تجهيز بيانات ${messagesQueue.length} معلم. إذا لم يفتح واتساب تلقائياً، تأكد من تحديث الإضافة وتفعيلها.`);
+    alert(`تم تجهيز بيانات ${messagesQueue.length} معلم. سيتم فتح واتساب الآن لبدء الإرسال تلقائياً.`);
   };
 
   if (printMode) {
