@@ -227,6 +227,51 @@ export const TeacherAssignment: React.FC = () => {
     XLSX.writeFile(workbook, `whatsapp_bulk_${selectedDate}_p${selectedPeriod}.xlsx`);
   };
 
+  const handleAutoSend = () => {
+    const currentDaySchedules = schedules.filter(s => s.exam_date === selectedDate && s.period === selectedPeriod);
+    const subjects = currentDaySchedules.map(s => s.subject).join(' / ');
+    const dayName = currentDaySchedules[0]?.day_name || '';
+
+    const messagesQueue: { phone: string; message: string }[] = [];
+    committees.forEach(committee => {
+      [1, 2].forEach(slot => {
+        const teacherId = getAssignedTeacherId(committee.id!, slot);
+        if (teacherId) {
+          const teacher = teachers.find(t => t.id === teacherId);
+          if (teacher && teacher.phone) {
+            let phone = teacher.phone.replace(/\D/g, '');
+            if (phone.startsWith('05')) phone = '966' + phone.substring(1);
+            else if (phone.startsWith('5')) phone = '966' + phone;
+
+            const message = `السلام عليكم أ. ${teacher.full_name}\n\nتم تكليفكم بالمراقبة في لجنة (${committee.name})\nالمقر: ${committee.location || '—'}\nاليوم: ${dayName}\nالتاريخ: ${selectedDate}\nالفترة: ${selectedPeriod}\nالمواد: ${subjects}\n\nنتمنى لكم التوفيق.`;
+            
+            messagesQueue.push({ phone, message });
+          }
+        }
+      });
+    });
+
+    if (messagesQueue.length === 0) {
+      alert('لا يوجد تكليفات لإرسالها في هذا اليوم والفترة');
+      return;
+    }
+
+    // Send to extension via postMessage
+    const sendData = () => {
+      window.postMessage({
+        type: "SEND_TO_WHATSAPP_EXTENSION",
+        payload: messagesQueue,
+        source: "TEACHER_ASSIGNMENT_APP"
+      }, "*");
+    };
+
+    // Try sending immediately and then after a short delay to ensure extension is ready
+    sendData();
+    setTimeout(sendData, 500);
+    
+    alert(`تم تجهيز بيانات ${messagesQueue.length} معلم. إذا لم يفتح واتساب تلقائياً، تأكد من تحديث الإضافة وتفعيلها.`);
+  };
+
   if (printMode) {
     const currentDaySchedules = schedules.filter(s => s.exam_date === selectedDate && s.period === selectedPeriod);
     const dayName = currentDaySchedules[0]?.day_name || '—';
@@ -493,6 +538,13 @@ export const TeacherAssignment: React.FC = () => {
               >
                 {saving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
                 حفظ التوزيع
+              </button>
+              <button 
+                onClick={handleAutoSend}
+                className="bg-indigo-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-900/20"
+              >
+                <MessageSquare size={18} />
+                الإرسال الذكي (تلقائي)
               </button>
               <button 
                 onClick={exportForBulkWhatsApp}
