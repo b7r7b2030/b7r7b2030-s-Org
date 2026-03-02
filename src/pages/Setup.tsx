@@ -10,7 +10,8 @@ import {
   Terminal,
   Play,
   Calendar,
-  Trash2
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { sbFetch } from '../services/supabase';
@@ -315,6 +316,49 @@ export const Setup: React.FC = () => {
             >
               <Trash2 size={18} />
               مسح جميع بيانات المعلمين
+            </button>
+          </div>
+
+          <div className="bg-card border border-border rounded-2xl p-6 relative overflow-hidden md:col-span-2">
+            <div className="absolute top-0 right-0 px-4 py-1 bg-black text-white text-[10px] font-bold rounded-bl-xl">تصفير النظام بالكامل</div>
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2">
+              <RefreshCw size={18} className="text-red" />
+              تهيئة النظام للعمل الرسمي (نقطة الصفر)
+            </h3>
+            <p className="text-xs text-text3 mb-6 leading-relaxed">
+              هذا الإجراء سيقوم بحذف <strong>جميع البيانات</strong> (الطلاب، المعلمين، اللجان، الحضور، التكليفات، المظاريف، والجدول) للبدء من جديد. 
+              <br />
+              <span className="text-red font-bold">تحذير: لا يمكن التراجع عن هذا الإجراء!</span>
+            </p>
+            <button 
+              onClick={async () => {
+                if(confirm('⚠️ تحذير نهائي: هل أنت متأكد من رغبتك في تصفير النظام بالكامل؟ سيتم حذف كل شيء!')) {
+                  try {
+                    setTesting(true);
+                    // Delete in order to respect foreign keys if any (though CASCADE is usually on)
+                    await sbFetch('attendance', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                    await sbFetch('envelopes', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                    await sbFetch('teacher_assignments', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                    await sbFetch('exam_schedules', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                    await sbFetch('committees', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                    await sbFetch('students', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                    await sbFetch('teachers', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                    await sbFetch('alerts', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                    
+                    alert('تمت تهيئة النظام بنجاح. يمكنك الآن البدء في إدخال البيانات الرسمية.');
+                    window.location.reload();
+                  } catch (e) {
+                    alert('حدث خطأ أثناء التهيئة');
+                  } finally {
+                    setTesting(false);
+                  }
+                }
+              }}
+              disabled={testing}
+              className="w-full py-4 bg-red text-white font-bold rounded-xl hover:bg-red/90 transition-all flex items-center justify-center gap-3 shadow-lg shadow-red/20"
+            >
+              <RefreshCw size={20} className={testing ? "animate-spin" : ""} />
+              تصفير النظام والبدء من جديد
             </button>
           </div>
         </div>

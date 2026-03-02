@@ -1,0 +1,23 @@
+{
+  "name": "نظام نقاطي - المعلم والطلاب",
+  "short_name": "نقاطي",
+  "description": "نظام متكامل لإدارة نقاط الطلاب وتحفيزهم عبر رموز QR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#10B981",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/points-app/192/192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://picsum.photos/seed/points-app/512/512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

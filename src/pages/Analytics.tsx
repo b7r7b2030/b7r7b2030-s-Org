@@ -40,43 +40,79 @@ export const Analytics: React.FC = () => {
 
   const fetchAnalytics = async () => {
     setLoading(true);
-    // Fetch some real data to derive analytics
-    const [attendance, committees] = await Promise.all([
-      sbFetch<any>('attendance', 'GET', null, '?select=*'),
-      sbFetch<any>('committees', 'GET', null, '?select=*')
-    ]);
-
-    if (attendance && committees) {
-      // Mocking some derived analytics based on real counts
-      const totalStudents = 100; // Placeholder
-      const absentCount = attendance.filter(a => a.status === 'absent').length;
-      const presentCount = attendance.filter(a => a.status === 'present').length;
-
-      setAbsenceData([
-        { name: 'العربية', غياب: Math.floor(Math.random() * 15) },
-        { name: 'الرياضيات', غياب: Math.floor(Math.random() * 15) },
-        { name: 'العلوم', غياب: Math.floor(Math.random() * 15) },
-        { name: 'الإنجليزية', غياب: Math.floor(Math.random() * 15) },
-        { name: 'التاريخ', غياب: Math.floor(Math.random() * 15) },
-        { name: 'الفيزياء', غياب: Math.floor(Math.random() * 15) },
+    try {
+      const [summary, schedules, committeesData] = await Promise.all([
+        sbFetch<any>('v_committee_summary', 'GET', null, '?select=*'),
+        sbFetch<any>('exam_schedules', 'GET', null, '?select=*'),
+        sbFetch<any>('committees', 'GET', null, '?select=*')
       ]);
 
-      setWeeklyTrend([
-        { name: 'الأسبوع 1', نسبة: 90 + Math.floor(Math.random() * 10) },
-        { name: 'الأسبوع 2', نسبة: 90 + Math.floor(Math.random() * 10) },
-        { name: 'الأسبوع 3', نسبة: 90 + Math.floor(Math.random() * 10) },
-        { name: 'الأسبوع 4', نسبة: 90 + Math.floor(Math.random() * 10) },
-        { name: 'الأسبوع 5', نسبة: 90 + Math.floor(Math.random() * 10) },
-      ]);
+      if (summary && committeesData) {
+        // 1. Absence by Subject
+        const subjectAbsence: Record<string, number> = {};
+        summary.forEach((s: any) => {
+          const committee = committeesData.find((c: any) => c.id === s.committee_id);
+          const subject = committee?.subject || 'غير محدد';
+          subjectAbsence[subject] = (subjectAbsence[subject] || 0) + (s.absent_count || 0);
+        });
 
-      const topCommittees = committees.slice(0, 3).map((c, i) => ({
-        id: c.name,
-        sub: c.subject || 'عام',
-        score: 90 + Math.floor(Math.random() * 10),
-        color: i === 0 ? 'green' : i === 1 ? 'accent' : 'gold',
-        icon: i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'
-      }));
-      setRankings(topCommittees);
+        const absenceChartData = Object.entries(subjectAbsence).map(([name, count]) => ({
+          name,
+          غياب: count
+        })).slice(0, 6); // Limit to top 6 subjects
+
+        setAbsenceData(absenceChartData.length > 0 ? absenceChartData : [
+          { name: 'لا توجد بيانات', غياب: 0 }
+        ]);
+
+        // 2. Weekly Trend (Calculated by Date from schedules)
+        // We'll group by date and calculate overall attendance %
+        const dateAttendance: Record<string, { present: number, total: number }> = {};
+        
+        // Map committees to dates
+        summary.forEach((s: any) => {
+          const committee = committeesData.find((c: any) => c.id === s.committee_id);
+          const date = committee?.exam_date || 'غير محدد';
+          if (!dateAttendance[date]) dateAttendance[date] = { present: 0, total: 0 };
+          dateAttendance[date].present += (s.present_count || 0);
+          dateAttendance[date].total += (s.total_students || 0);
+        });
+
+        const trendData = Object.entries(dateAttendance)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, counts]) => ({
+            name: date,
+            نسبة: counts.total > 0 ? Math.round((counts.present / counts.total) * 100) : 100
+          }));
+
+        setWeeklyTrend(trendData.length > 0 ? trendData : [
+          { name: 'اليوم 1', نسبة: 100 },
+          { name: 'اليوم 2', نسبة: 100 }
+        ]);
+
+        // 3. Committee Rankings
+        const committeeRankings = summary
+          .map((s: any) => {
+            const committee = committeesData.find((c: any) => c.id === s.committee_id);
+            const score = s.total_students > 0 ? Math.round((s.present_count / s.total_students) * 100) : 100;
+            return {
+              id: s.committee_name,
+              sub: committee?.subject || 'عام',
+              score: score
+            };
+          })
+          .sort((a: any, b: any) => b.score - a.score)
+          .slice(0, 5)
+          .map((rank: any, i: number) => ({
+            ...rank,
+            color: i === 0 ? 'green' : i === 1 ? 'accent' : 'gold',
+            icon: i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '🎖️'
+          }));
+
+        setRankings(committeeRankings);
+      }
+    } catch (error) {
+      console.error("Analytics fetch error:", error);
     }
     setLoading(false);
   };

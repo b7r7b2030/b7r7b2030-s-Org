@@ -17,13 +17,21 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, title }) 
 
   useEffect(() => {
     let stream: MediaStream | null = null;
-    let animationFrameId: number;
 
     async function setupCamera() {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'environment' } 
-        });
+        // Try environment camera first (back camera on mobile)
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' } 
+          });
+        } catch (e) {
+          // Fallback to any available camera
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: true 
+          });
+        }
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -36,10 +44,22 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, title }) 
 
     setupCamera();
 
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasPermission || !scanning) return;
+
+    let animationFrameId: number;
+    
     const scan = () => {
       if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA && canvasRef.current) {
         const canvas = canvasRef.current;
-        const context = canvas.getContext('2d');
+        const context = canvas.getContext('2d', { willReadFrequently: true });
         if (context) {
           canvas.height = videoRef.current.videoHeight;
           canvas.width = videoRef.current.videoWidth;
@@ -56,20 +76,15 @@ export const QRScanner: React.FC<QRScannerProps> = ({ onScan, onClose, title }) 
           }
         }
       }
-      if (scanning) {
-        animationFrameId = requestAnimationFrame(scan);
-      }
+      animationFrameId = requestAnimationFrame(scan);
     };
 
-    if (hasPermission) {
-      animationFrameId = requestAnimationFrame(scan);
-    }
+    animationFrameId = requestAnimationFrame(scan);
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
       }
-      cancelAnimationFrame(animationFrameId);
     };
   }, [hasPermission, onScan, scanning]);
 
