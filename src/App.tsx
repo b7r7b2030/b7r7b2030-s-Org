@@ -173,7 +173,7 @@ export default function App() {
 
         <footer className="p-8 border-t border-border text-center print:hidden">
           <p className="text-xs text-text3 font-medium">
-            © {new Date().getFullYear()} نظام إدارة الاختبارات الذكي — جميع الحقوق محفوظة
+            © {new Date().getFullYear()} منصة ثانوية الأمير عبدالمجيد الأولى للاختبارات — جميع الحقوق محفوظة
           </p>
         </footer>
       </main>

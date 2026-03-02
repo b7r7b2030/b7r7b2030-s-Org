@@ -118,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="w-10 h-10 bg-linear-to-br from-accent to-purple rounded-xl flex items-center justify-center text-white shadow-lg">
               <GraduationCap size={20} />
             </div>
-            <h2 className="font-display font-extrabold text-sm text-text">نظام الاختبارات</h2>
+            <h2 className="font-display font-extrabold text-sm text-text">ثانوية الأمير عبدالمجيد</h2>
           </div>
           <button onClick={() => setIsOpen(false)} className="lg:hidden p-2 text-text3">
             <X size={20} />
