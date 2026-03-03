@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS envelopes (
     envelope_no     TEXT        UNIQUE NOT NULL,
     committee_id    UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
     status          TEXT        DEFAULT 'pending' CHECK (status IN ('pending','received','in_progress','delivered')),
-    received_by     UUID        REFERENCES teachers(id) ON DELETE SET NULL,
+    received_by     UUID        REFERENCES staff(id) ON DELETE SET NULL,
     received_at     TIMESTAMPTZ,
     exam_ended_at   TIMESTAMPTZ,
     delivered_at    TIMESTAMPTZ,
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     committee_id  UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
     student_id    UUID        NOT NULL REFERENCES students(id)   ON DELETE CASCADE,
-    teacher_id    UUID        REFERENCES teachers(id) ON DELETE SET NULL,
+    teacher_id    UUID        REFERENCES staff(id) ON DELETE SET NULL,
     status        TEXT        NOT NULL CHECK (status IN ('present','absent','late')),
     recorded_at   TIMESTAMPTZ DEFAULT now(),
     UNIQUE (committee_id, student_id)
