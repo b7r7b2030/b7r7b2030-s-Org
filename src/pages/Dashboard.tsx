@@ -47,14 +47,15 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const fetchStats = async () => {
-    const [sData, tData, aData, cStats, eData, absentData, allStudents] = await Promise.all([
+    const [sData, tData, aData, cStats, eData, absentData, allStudents, manualAlerts] = await Promise.all([
       sbFetch<any>('students', 'GET', null, '?select=id'),
       sbFetch<any>('staff', 'GET', null, '?select=id'),
       sbFetch<any>('attendance', 'GET', null, '?select=id,student_id,status,recorded_at'),
       sbFetch<any>('v_committee_summary', 'GET', null, '?select=*'),
       sbFetch<any>('envelopes', 'GET', null, '?select=status,committee_id,envelope_no,updated_at,committees(name)'),
       sbFetch<any>('v_absent_students', 'GET', null, '?select=*&limit=5'),
-      sbFetch<any>('students', 'GET', null, '?select=id,committee_name')
+      sbFetch<any>('students', 'GET', null, '?select=id,committee_name'),
+      sbFetch<any>('alerts', 'GET', null, '?order=created_at.desc&limit=5')
     ]);
 
     const totalStudents = sData?.length || 0;
@@ -142,11 +143,32 @@ export const Dashboard: React.FC = () => {
           title: `تأخر مظروف: ${e.envelope_no}`,
           desc: `لجنة ${e.committees?.name || '—'} — الحالة: ${e.status}`,
           time: e.updated_at ? new Date(e.updated_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'الآن',
-          icon: Package
+          icon: Package,
+          created_at: e.updated_at
         });
       });
     }
-    setAlerts(combinedAlerts.slice(0, 5));
+
+    if (manualAlerts) {
+      manualAlerts.forEach((ma: any) => {
+        combinedAlerts.push({
+          id: `manual-${ma.id}`,
+          type: ma.type === 'red' ? 'error' : ma.type === 'gold' ? 'warning' : 'info',
+          title: ma.title,
+          desc: ma.body,
+          time: ma.created_at ? new Date(ma.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'الآن',
+          icon: ma.type === 'red' ? XCircle : ma.type === 'gold' ? Package : CheckCircle2,
+          created_at: ma.created_at
+        });
+      });
+    }
+
+    // Sort combined alerts by created_at
+    const sortedAlerts = combinedAlerts.sort((a, b) => {
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+
+    setAlerts(sortedAlerts.slice(0, 5));
 
     if (aData) {
       const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];

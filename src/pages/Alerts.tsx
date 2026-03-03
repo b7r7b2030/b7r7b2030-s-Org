@@ -65,10 +65,21 @@ export const Alerts: React.FC = () => {
 
       if (manualAlerts) {
         manualAlerts.forEach((ma: any) => {
+          // Improved categorization logic
+          let category: 'absent' | 'delay' = 'delay';
+          const isAbsent = ma.type === 'red' || 
+                          ma.title.includes('غياب') || 
+                          ma.title.includes('طالب') || 
+                          (ma.body && (ma.body.includes('غياب') || ma.body.includes('طالب')));
+          
+          if (isAbsent) {
+            category = 'absent';
+          }
+
           formattedAlerts.push({
             id: `manual-${ma.id}`,
             type: ma.type,
-            category: ma.type === 'red' ? 'absent' : 'delay',
+            category: category,
             title: ma.title,
             desc: ma.body,
             time: ma.created_at ? new Date(ma.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد',

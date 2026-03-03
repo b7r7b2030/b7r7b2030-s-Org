@@ -175,34 +175,51 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
     if (!committee) return;
     
     const existingRecord = attendanceRecords[studentId];
+    const oldStatus = attendance[studentId];
     
     // Optimistic update
     setAttendance(prev => ({ ...prev, [studentId]: status }));
 
-    let res;
-    if (existingRecord?.id) {
-      // Update existing record
-      res = await sbFetch<AttendanceRecord>('attendance', 'PATCH', {
-        status: status,
-        recorded_at: new Date().toISOString()
-      }, `?id=eq.${existingRecord.id}`);
-    } else {
-      // Create new record
-      res = await sbFetch<AttendanceRecord>('attendance', 'POST', {
-        student_id: studentId,
-        committee_id: committee.id,
-        teacher_id: user.id,
-        status: status,
-        recorded_at: new Date().toISOString()
-      });
-    }
+    try {
+      let res;
+      if (existingRecord?.id) {
+        // Update existing record
+        res = await sbFetch<AttendanceRecord>('attendance', 'PATCH', {
+          status: status,
+          recorded_at: new Date().toISOString()
+        }, `?id=eq.${existingRecord.id}`);
+      } else {
+        // Create new record
+        res = await sbFetch<AttendanceRecord>('attendance', 'POST', {
+          student_id: studentId,
+          committee_id: committee.id,
+          teacher_id: user.id,
+          status: status,
+          recorded_at: new Date().toISOString()
+        });
 
-    if (res && res.length > 0) {
-      setAttendanceRecords(prev => ({ ...prev, [studentId]: res![0] }));
-    } else if (!res) {
+        // Fallback: If first attempt failed (likely due to foreign key constraint)
+        if (!res) {
+          console.warn('Retrying without teacher_id due to potential constraint error');
+          res = await sbFetch<AttendanceRecord>('attendance', 'POST', {
+            student_id: studentId,
+            committee_id: committee.id,
+            status: status,
+            recorded_at: new Date().toISOString()
+          });
+        }
+      }
+
+      if (res && res.length > 0) {
+        setAttendanceRecords(prev => ({ ...prev, [studentId]: res![0] }));
+      } else if (!res) {
+        throw new Error('No response from server');
+      }
+    } catch (error) {
+      console.error('Error updating attendance:', error);
+      alert('فشل تحديث الحالة. يرجى التأكد من تشغيل سكريبت SQL المحدث في صفحة الإعدادات.');
       // Rollback on failure
-      alert('فشل تحديث الحالة. يرجى المحاولة مرة أخرى.');
-      // Re-fetch to sync
+      setAttendance(prev => ({ ...prev, [studentId]: oldStatus }));
     }
   };
 
