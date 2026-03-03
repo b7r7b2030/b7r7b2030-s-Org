@@ -111,6 +111,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
         
         if (cData && cData.length > 0) {
           const currentCommittee = cData[0];
+          if (!currentCommittee) throw new Error('بيانات اللجنة غير صالحة.');
+          
           setCommittee(currentCommittee);
 
           // Update envelope status to 'in_progress' immediately when teacher starts
@@ -140,25 +142,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                 attMap[a.student_id] = a.status;
                 recordMap[a.student_id] = a;
               });
-            } else {
-              // Default all to present if no attendance recorded yet
-              sorted.forEach(s => {
-                if (s.id) attMap[s.id] = 'present';
-              });
-              
-              const defaultAttendance = sorted.map(s => ({
-                student_id: s.id,
-                committee_id: currentCommittee.id,
-                teacher_id: user.id,
-                status: 'present',
-                recorded_at: new Date().toISOString()
-              }));
-              
-              const saved = await sbFetch<AttendanceRecord>('attendance', 'POST', defaultAttendance);
-              if (saved) {
-                saved.forEach(a => recordMap[a.student_id] = a);
-              }
             }
+            
+            // Ensure all students have a default 'present' state in local UI
+            sorted.forEach(s => {
+              if (s.id && !attMap[s.id]) {
+                attMap[s.id] = 'present';
+              }
+            });
+
             setAttendance(attMap);
             setAttendanceRecords(recordMap);
           } else {
@@ -380,28 +372,23 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
               </div>
 
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => s.id && handleAttendance(s.id, 'absent')}
-                  className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
-                    attendance[s.id!] === 'absent' 
-                      ? "bg-red text-white shadow-lg shadow-red/30" 
-                      : "bg-red/10 text-red hover:bg-red/20"
-                  )}
-                >
-                  <XCircle size={20} />
-                </button>
-                <button 
-                  onClick={() => s.id && handleAttendance(s.id, 'present')}
-                  className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
-                    attendance[s.id!] === 'present' 
-                      ? "bg-green text-white shadow-lg shadow-green/30" 
-                      : "bg-green/10 text-green hover:bg-green/20"
-                  )}
-                >
-                  <CheckCircle2 size={20} />
-                </button>
+                {attendance[s.id!] === 'absent' ? (
+                  <button 
+                    onClick={() => s.id && handleAttendance(s.id, 'present')}
+                    className="flex items-center gap-2 px-4 py-2 bg-green text-white rounded-xl font-bold text-xs shadow-lg shadow-green/20 animate-in zoom-in duration-300"
+                  >
+                    <CheckCircle2 size={16} />
+                    تراجع عن الغياب
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => s.id && handleAttendance(s.id, 'absent')}
+                    className="flex items-center gap-2 px-4 py-2 bg-red/10 text-red border border-red/20 rounded-xl font-bold text-xs hover:bg-red hover:text-white transition-all"
+                  >
+                    <XCircle size={16} />
+                    تسجيل غياب
+                  </button>
+                )}
               </div>
             </div>
           ))}

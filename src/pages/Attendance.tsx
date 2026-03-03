@@ -26,6 +26,7 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
   const [students, setStudents] = useState<Student[]>([]);
   const [committees, setCommittees] = useState<Committee[]>([]);
   const [absentStudents, setAbsentStudents] = useState<any[]>([]);
+  const [envelopes, setEnvelopes] = useState<any[]>([]);
   const [selectedCommittee, setSelectedCommittee] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -49,11 +50,12 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
 
   const fetchInitialData = async () => {
     setLoading(true);
-    const [cData, sData, aData, absData] = await Promise.all([
+    const [cData, sData, aData, absData, envData] = await Promise.all([
       sbFetch<Committee>('committees', 'GET', null, '?select=*&order=name'),
       sbFetch<Student>('students', 'GET', null, '?select=*'),
       sbFetch<any>('attendance', 'GET', null, '?select=student_id,status'),
-      sbFetch<any>('v_absent_students', 'GET', null, '?select=*')
+      sbFetch<any>('v_absent_students', 'GET', null, '?select=*'),
+      sbFetch<any>('envelopes', 'GET', null, '?select=committee_id,status')
     ]);
     
     if (cData) {
@@ -67,6 +69,7 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
       setAttendanceMap(map);
     }
     if (absData) setAbsentStudents(absData);
+    if (envData) setEnvelopes(envData);
     setLoading(false);
   };
 
@@ -98,11 +101,33 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
       return parseInt(a.seat_no || '0') - parseInt(b.seat_no || '0');
     });
 
-  const statsData = [
-    { name: 'حاضر', value: Object.values(attendanceMap).filter(v => v === 'present').length, color: '#10b981' },
-    { name: 'غائب', value: Object.values(attendanceMap).filter(v => v === 'absent').length, color: '#ef4444' },
-    { name: 'متأخر', value: Object.values(attendanceMap).filter(v => v === 'late').length, color: '#f59e0b' },
-  ];
+  const calculateStats = () => {
+    let present = 0;
+    let absent = 0;
+    let late = 0;
+
+    students.forEach(s => {
+      const status = attendanceMap[s.id!];
+      const committeeId = committees.find(c => c.name === s.committee_name)?.id;
+      const committeeStatus = envelopes.find(e => e.committee_id === committeeId)?.status;
+      
+      if (status === 'present' || (!status && committeeStatus === 'in_progress')) {
+        present++;
+      } else if (status === 'absent') {
+        absent++;
+      } else if (status === 'late') {
+        late++;
+      }
+    });
+
+    return [
+      { name: 'حاضر', value: present, color: '#10b981' },
+      { name: 'غائب', value: absent, color: '#ef4444' },
+      { name: 'متأخر', value: late, color: '#f59e0b' },
+    ];
+  };
+
+  const statsData = calculateStats();
 
   if (userRole === UserRole.COUNSELOR) {
     return (
@@ -233,10 +258,10 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
                       <td className="px-6 py-4">
                         <span className={cn(
                           "px-2 py-0.5 text-[10px] font-bold rounded-full",
-                          attendanceMap[s.id!] === 'present' ? "bg-green/10 text-green" : 
+                          (attendanceMap[s.id!] === 'present' || (!attendanceMap[s.id!] && envelopes.find(e => e.committee_id === committees.find(c => c.name === s.committee_name)?.id)?.status === 'in_progress')) ? "bg-green/10 text-green" : 
                           attendanceMap[s.id!] === 'absent' ? "bg-red/10 text-red" : "text-text3"
                         )}>
-                          {attendanceMap[s.id!] === 'present' ? 'حاضر' : 
+                          {(attendanceMap[s.id!] === 'present' || (!attendanceMap[s.id!] && envelopes.find(e => e.committee_id === committees.find(c => c.name === s.committee_name)?.id)?.status === 'in_progress')) ? 'حاضر' : 
                            attendanceMap[s.id!] === 'absent' ? 'غائب' : 'بانتظار التحضير'}
                         </span>
                       </td>
@@ -304,24 +329,34 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
             </div>
             
             <div className="space-y-4 mt-4">
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-text2">الحضور</span>
-                  <span className="font-bold text-green">28 طالب (93%)</span>
-                </div>
-                <div className="h-1.5 bg-bg3 rounded-full overflow-hidden">
-                  <div className="h-full bg-linear-to-r from-green to-cyan-500 rounded-full" style={{ width: '93%' }}></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-text2">الغياب</span>
-                  <span className="font-bold text-red">2 طلاب (7%)</span>
-                </div>
-                <div className="h-1.5 bg-bg3 rounded-full overflow-hidden">
-                  <div className="h-full bg-red rounded-full" style={{ width: '7%' }}></div>
-                </div>
-              </div>
+              {statsData.map((stat, idx) => {
+                const total = statsData.reduce((acc, curr) => acc + curr.value, 0);
+                const percentage = total > 0 ? Math.round((stat.value / total) * 100) : 0;
+                if (stat.value === 0 && stat.name !== 'حاضر') return null;
+                
+                return (
+                  <div key={idx}>
+                    <div className="flex justify-between text-xs mb-1.5">
+                      <span className="text-text2">{stat.name}</span>
+                      <span className={cn("font-bold", 
+                        stat.name === 'حاضر' ? "text-green" : 
+                        stat.name === 'غائب' ? "text-red" : "text-gold"
+                      )}>
+                        {stat.value} طالب ({percentage}%)
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-bg3 rounded-full overflow-hidden">
+                      <div 
+                        className={cn("h-full rounded-full", 
+                          stat.name === 'حاضر' ? "bg-linear-to-r from-green to-cyan-500" : 
+                          stat.name === 'غائب' ? "bg-red" : "bg-gold"
+                        )} 
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

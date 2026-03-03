@@ -47,29 +47,61 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const fetchStats = async () => {
-    const [sData, tData, aData, cStats, eData, absentData] = await Promise.all([
+    const [sData, tData, aData, cStats, eData, absentData, allStudents] = await Promise.all([
       sbFetch<any>('students', 'GET', null, '?select=id'),
       sbFetch<any>('staff', 'GET', null, '?select=id'),
-      sbFetch<any>('attendance', 'GET', null, '?select=id,status,recorded_at'),
+      sbFetch<any>('attendance', 'GET', null, '?select=id,student_id,status,recorded_at'),
       sbFetch<any>('v_committee_summary', 'GET', null, '?select=*'),
-      sbFetch<any>('envelopes', 'GET', null, '?select=status,envelope_no,updated_at,committees(name)'),
-      sbFetch<any>('v_absent_students', 'GET', null, '?select=*&limit=5')
+      sbFetch<any>('envelopes', 'GET', null, '?select=status,committee_id,envelope_no,updated_at,committees(name)'),
+      sbFetch<any>('v_absent_students', 'GET', null, '?select=*&limit=5'),
+      sbFetch<any>('students', 'GET', null, '?select=id,committee_name')
     ]);
 
     const totalStudents = sData?.length || 0;
     const totalStaff = tData?.length || 0;
-    const presentCount = aData?.filter((a: any) => a.status === 'present').length || 0;
-    const absentCount = aData?.filter((a: any) => a.status === 'absent').length || 0;
+    
+    // Calculate real-time attendance based on active committees
+    const activeCommitteeIds = eData?.filter((e: any) => e.status === 'in_progress').map((e: any) => e.committee_id) || [];
+    const activeCommitteeNames = eData?.filter((e: any) => e.status === 'in_progress').map((e: any) => e.committees?.name).filter(Boolean) || [];
+
+    const attendanceMap: Record<string, string> = {};
+    aData?.forEach((a: any) => attendanceMap[a.student_id] = a.status);
+
+    let calculatedPresent = 0;
+    let calculatedAbsent = 0;
+
+    allStudents?.forEach((s: any) => {
+      const status = attendanceMap[s.id];
+      const isCommitteeActive = activeCommitteeNames.includes(s.committee_name);
+
+      if (status === 'absent') {
+        calculatedAbsent++;
+      } else if (status === 'present' || (isCommitteeActive && !status)) {
+        calculatedPresent++;
+      }
+    });
 
     setStats([
       { label: 'إجمالي الطلاب', value: totalStudents.toLocaleString(), icon: Users, color: 'blue', change: 'محدث', trend: 'up' },
       { label: 'طاقم العمل', value: totalStaff.toLocaleString(), icon: UserSquare2, color: 'gold', change: 'نشط', trend: 'up' },
-      { label: 'الحاضرون اليوم', value: presentCount.toLocaleString(), icon: CheckCircle2, color: 'green', change: `${totalStudents > 0 ? Math.round((presentCount/totalStudents)*100) : 0}%`, trend: 'up' },
-      { label: 'الغائبون اليوم', value: absentCount.toLocaleString(), icon: XCircle, color: 'red', change: `${totalStudents > 0 ? Math.round((absentCount/totalStudents)*100) : 0}%`, trend: 'down' },
+      { label: 'الحاضرون اليوم', value: calculatedPresent.toLocaleString(), icon: CheckCircle2, color: 'green', change: `${totalStudents > 0 ? Math.round((calculatedPresent/totalStudents)*100) : 0}%`, trend: 'up' },
+      { label: 'الغائبون اليوم', value: calculatedAbsent.toLocaleString(), icon: XCircle, color: 'red', change: `${totalStudents > 0 ? Math.round((calculatedAbsent/totalStudents)*100) : 0}%`, trend: 'down' },
     ]);
 
     if (cStats) {
-      const sortedStats = [...cStats].sort((a, b) => {
+      const updatedCommitteeStats = cStats.map((c: any) => {
+        const isCommitteeActive = activeCommitteeNames.includes(c.committee_name);
+        if (isCommitteeActive) {
+          // If active, present count is total - absent
+          return {
+            ...c,
+            present_count: c.total_students - c.absent_count
+          };
+        }
+        return c;
+      });
+
+      const sortedStats = [...updatedCommitteeStats].sort((a, b) => {
         const nameA = a.committee_name || '';
         const nameB = b.committee_name || '';
         return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
@@ -121,7 +153,7 @@ export const Dashboard: React.FC = () => {
       const history = days.map(day => {
         const today = new Date().toLocaleDateString('ar-SA', { weekday: 'long' });
         if (today.includes(day)) {
-          return { name: day, حضور: presentCount, غياب: absentCount };
+          return { name: day, حضور: calculatedPresent, غياب: calculatedAbsent };
         }
         return { name: day, حضور: 0, غياب: 0 };
       });

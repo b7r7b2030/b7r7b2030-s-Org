@@ -130,7 +130,7 @@ export default function App() {
   if (userRole === UserRole.TEACHER) {
     return (
       <div className="min-h-screen bg-bg" dir="rtl">
-        <TeacherDashboard onLogout={handleLogout} />
+        <TeacherDashboard onLogout={handleLogout} user={user!} />
       </div>
     );
   }
