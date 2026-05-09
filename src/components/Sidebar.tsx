@@ -12,6 +12,7 @@ import {
   CheckCircle2, 
   QrCode, 
   BarChart3, 
+  FileText,
   TrendingUp, 
   Settings,
   GraduationCap,
@@ -54,9 +55,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'attendance', label: 'التحضير', icon: CheckCircle2, roles: [UserRole.TEACHER, UserRole.COUNSELOR, UserRole.CONTROL] },
     { id: 'examschedule', label: 'الجدول', icon: Calendar, roles: [UserRole.PRINCIPAL] },
     { id: 'qrcodes', label: 'QR', icon: QrCode, roles: [UserRole.PRINCIPAL, UserRole.TEACHER, UserRole.CONTROL] },
-    { id: 'reports', label: 'تقارير', icon: BarChart3, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR, UserRole.CONTROL] },
+    { id: 'reports', label: 'التقارير السريعة', icon: BarChart3, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR, UserRole.CONTROL] },
+    { id: 'official-reports', label: 'التقارير الرسمية', icon: FileText, roles: [UserRole.PRINCIPAL, UserRole.CONTROL] },
     { id: 'analytics', label: 'تحليل', icon: TrendingUp, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR, UserRole.CONTROL] },
     { id: 'setup', label: 'إعداد', icon: Settings, roles: [UserRole.PRINCIPAL] },
+    { id: 'diagnostics', label: 'حالة النظام', icon: ClipboardCheck, roles: [UserRole.PRINCIPAL] },
   ];
 
   const filteredItems = navItems.filter(item => item.roles.includes(userRole));

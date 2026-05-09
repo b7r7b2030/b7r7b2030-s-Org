@@ -32,7 +32,7 @@ export const Reports: React.FC = () => {
   const fetchAttendance = async () => {
     setLoading(true);
     // In a real app, we'd filter by date in the query
-    const data = await sbFetch<any>('attendance', 'GET', null, '?select=*,students(full_name,student_no,grade,classroom),committees(name),teachers(full_name)');
+    const data = await sbFetch<any>('attendance', 'GET', null, '?select=*,students(full_name,student_no,grade,classroom),committees(name),staff(full_name)');
     if (data) {
       setAttendance(data);
     }
@@ -129,7 +129,7 @@ export const Reports: React.FC = () => {
                   <td className="px-6 py-4 text-text3 text-xs">
                     {row.recorded_at ? new Date(row.recorded_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '—'}
                   </td>
-                  <td className="px-6 py-4 text-text2">{row.teachers?.full_name || '—'}</td>
+                  <td className="px-6 py-4 text-text2">{row.staff?.full_name || '—'}</td>
                 </tr>
               )) : (
                 <tr>

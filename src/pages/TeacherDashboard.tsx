@@ -20,6 +20,7 @@ import { cn } from '../lib/utils';
 import { QRScanner } from '../components/QRScanner';
 import { Student, Committee, AttendanceRecord, User } from '../types';
 import { sbFetch } from '../services/supabase';
+import { logAction } from '../services/logger';
 
 interface TeacherDashboardProps {
   onLogout?: () => void;
@@ -120,6 +121,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
             status: 'in_progress',
             updated_at: new Date().toISOString()
           }, `?committee_id=eq.${currentCommittee.id}`);
+
+          await logAction(
+            user.id,
+            `بدء تحضير اللجنة ${currentCommittee.name}`,
+            'envelope',
+            { committee_id: currentCommittee.id, committee_name: currentCommittee.name }
+          );
           
           // Fetch students for this committee
           const sData = await sbFetch<Student>('students', 'GET', null, `?committee_name=eq.${currentCommittee.name}`);
@@ -188,6 +196,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
           status: status,
           recorded_at: new Date().toISOString()
         }, `?id=eq.${existingRecord.id}`);
+
+        await logAction(
+          user.id,
+          `تحديث حالة الطالب: ${status}`,
+          'attendance',
+          { student_id: studentId, status, old_status: oldStatus }
+        );
       } else {
         // Create new record
         res = await sbFetch<AttendanceRecord>('attendance', 'POST', {
@@ -197,6 +212,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
           status: status,
           recorded_at: new Date().toISOString()
         });
+
+        await logAction(
+          user.id,
+          `تسجيل حالة الطالب: ${status}`,
+          'attendance',
+          { student_id: studentId, status }
+        );
 
         // Fallback: If first attempt failed (likely due to foreign key constraint)
         if (!res) {
@@ -417,6 +439,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
         <button 
           onClick={() => {
             if (confirm('هل أنت متأكد من إنهاء الاختبار وتسليم المظروف للكنترول؟ سيتم إغلاق هذه الصفحة والعودة لمسح QR جديد.')) {
+              if (committee) {
+                logAction(
+                  user.id,
+                  `إنهاء الاختبار في اللجنة ${committee.name}`,
+                  'envelope',
+                  { committee_id: committee.id }
+                );
+              }
               setCommittee(null);
               setStudents([]);
               setIsScanning(true);

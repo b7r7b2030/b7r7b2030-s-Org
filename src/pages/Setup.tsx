@@ -36,6 +36,32 @@ CREATE TABLE IF NOT EXISTS students (
     updated_at      TIMESTAMPTZ DEFAULT now()
 );
 
+-- جدول طاقم العمل الموحد (مدير، معلم، مراقب، كنترول)
+CREATE TABLE IF NOT EXISTS staff (
+    id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    national_id     TEXT        UNIQUE NOT NULL,
+    full_name       TEXT        NOT NULL,
+    phone           TEXT,
+    role            TEXT        NOT NULL CHECK (role IN ('PRINCIPAL', 'TEACHER', 'COUNSELOR', 'CONTROL')),
+    is_online       BOOLEAN     DEFAULT false,
+    last_seen       TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- سجل عمليات النظام (Audit Trail)
+CREATE TABLE IF NOT EXISTS system_logs (
+    id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id     UUID        REFERENCES staff(id) ON DELETE SET NULL,
+    action      TEXT        NOT NULL,
+    category    TEXT        NOT NULL, -- 'auth', 'attendance', 'envelope', 'data'
+    details     JSONB,
+    severity    TEXT        DEFAULT 'info', -- 'info', 'warning', 'error'
+    ip_address  TEXT,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- الجدول القديم للمعلمين (للمسح أو التحويل تدريجياً)
 CREATE TABLE IF NOT EXISTS teachers (
     id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     teacher_no  TEXT        UNIQUE NOT NULL,
@@ -52,7 +78,7 @@ CREATE TABLE IF NOT EXISTS committees (
     name        TEXT        NOT NULL,
     location    TEXT,
     subject     TEXT,
-    teacher_id  UUID        REFERENCES teachers(id) ON DELETE SET NULL,
+    teacher_id  UUID        REFERENCES staff(id) ON DELETE SET NULL, -- تم التحديث ليخدم جدول staff
     exam_date   DATE,
     start_time  TIME,
     end_time    TIME,
@@ -64,7 +90,7 @@ CREATE TABLE IF NOT EXISTS committees (
 
 CREATE TABLE IF NOT EXISTS teacher_assignments (
     id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
-    teacher_id    UUID        NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+    teacher_id    UUID        NOT NULL REFERENCES staff(id) ON DELETE CASCADE, -- تم التحديث ليخدم جدول staff
     committee_id  UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
     exam_date     DATE        NOT NULL,
     period        INTEGER     NOT NULL,
@@ -99,17 +125,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     UNIQUE (committee_id, student_id)
 );
 
-CREATE TABLE IF NOT EXISTS staff (
-    id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
-    national_id     TEXT        UNIQUE NOT NULL,
-    full_name       TEXT        NOT NULL,
-    phone           TEXT,
-    role            TEXT        NOT NULL CHECK (role IN ('PRINCIPAL', 'TEACHER', 'COUNSELOR', 'CONTROL')),
-    created_at      TIMESTAMPTZ DEFAULT now(),
-    updated_at      TIMESTAMPTZ DEFAULT now()
-);
-
--- إضافة حساب المدير الافتراضي (يمكن للمدير تغييره لاحقاً)
+-- إضافة حساب المدير الافتراضي
 INSERT INTO staff (national_id, full_name, role)
 VALUES ('1234567890', 'مدير النظام', 'PRINCIPAL')
 ON CONFLICT (national_id) DO NOTHING;
@@ -134,8 +150,8 @@ CREATE TABLE IF NOT EXISTS exam_schedules (
 );
 
 -- 2. التقارير الذكية (Views)
-DROP VIEW IF EXISTS v_committee_summary;
-CREATE OR REPLACE VIEW v_committee_summary AS
+DROP VIEW IF EXISTS v_committee_summary CASCADE;
+CREATE VIEW v_committee_summary AS
 SELECT 
     c.id AS committee_id,
     c.name AS committee_name,
@@ -148,8 +164,8 @@ LEFT JOIN students s ON s.committee_name = c.name
 LEFT JOIN attendance a ON a.committee_id = c.id AND a.student_id = s.id
 GROUP BY c.id, c.name;
 
-DROP VIEW IF EXISTS v_absent_students;
-CREATE OR REPLACE VIEW v_absent_students AS
+DROP VIEW IF EXISTS v_absent_students CASCADE;
+CREATE VIEW v_absent_students AS
 SELECT 
     s.id AS student_id,
     s.full_name,
@@ -164,8 +180,8 @@ JOIN attendance a ON s.id = a.student_id
 JOIN committees c ON a.committee_id = c.id
 WHERE a.status = 'absent';
 
-DROP VIEW IF EXISTS v_envelope_tracking;
-CREATE OR REPLACE VIEW v_envelope_tracking AS
+DROP VIEW IF EXISTS v_envelope_tracking CASCADE;
+CREATE VIEW v_envelope_tracking AS
 SELECT 
     e.id,
     e.envelope_no,
@@ -173,12 +189,12 @@ SELECT
     c.name AS committee_name,
     c.subject,
     c.exam_date,
-    t.full_name AS teacher_name,
+    s.full_name AS teacher_name,
     e.delivered_at,
     e.created_at AS received_at
 FROM envelopes e
 LEFT JOIN committees c ON e.committee_id = c.id
-LEFT JOIN teachers t ON c.teacher_id = t.id;
+LEFT JOIN staff s ON c.teacher_id = s.id;
 
 CREATE TABLE IF NOT EXISTS alerts (
     id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -189,38 +205,18 @@ CREATE TABLE IF NOT EXISTS alerts (
     created_at  TIMESTAMPTZ DEFAULT now()
 );
 
--- 3. تفعيل RLS
-ALTER TABLE students ENABLE ROW LEVEL SECURITY;
-ALTER TABLE teachers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE committees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE envelopes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
-ALTER TABLE teacher_assignments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE exam_schedules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE staff ENABLE ROW LEVEL SECURITY;
-
--- حذف السياسات القديمة إن وجدت لتجنب الأخطاء
-DROP POLICY IF EXISTS "Allow All" ON students;
-DROP POLICY IF EXISTS "Allow All" ON teachers;
-DROP POLICY IF EXISTS "Allow All" ON committees;
-DROP POLICY IF EXISTS "Allow All" ON envelopes;
-DROP POLICY IF EXISTS "Allow All" ON attendance;
-DROP POLICY IF EXISTS "Allow All" ON teacher_assignments;
-DROP POLICY IF EXISTS "Allow All" ON exam_schedules;
-DROP POLICY IF EXISTS "Allow All" ON alerts;
-DROP POLICY IF EXISTS "Allow All" ON staff;
-
--- إنشاء السياسات الجديدة
-CREATE POLICY "Allow All" ON students FOR ALL USING (true);
-CREATE POLICY "Allow All" ON teachers FOR ALL USING (true);
-CREATE POLICY "Allow All" ON committees FOR ALL USING (true);
-CREATE POLICY "Allow All" ON envelopes FOR ALL USING (true);
-CREATE POLICY "Allow All" ON attendance FOR ALL USING (true);
-CREATE POLICY "Allow All" ON teacher_assignments FOR ALL USING (true);
-CREATE POLICY "Allow All" ON exam_schedules FOR ALL USING (true);
-CREATE POLICY "Allow All" ON alerts FOR ALL USING (true);
-CREATE POLICY "Allow All" ON staff FOR ALL USING (true);
+-- 3. تفعيل RLS وإنشاء السياسات بأمان
+DO $$ 
+DECLARE
+    t text;
+BEGIN
+    FOR t IN SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    LOOP
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+        EXECUTE format('DROP POLICY IF EXISTS "Allow All" ON %I', t);
+        EXECUTE format('CREATE POLICY "Allow All" ON %I FOR ALL USING (true)', t);
+    END LOOP;
+END $$;
 `;
 
 export const Setup: React.FC = () => {

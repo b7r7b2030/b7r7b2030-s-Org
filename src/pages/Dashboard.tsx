@@ -38,6 +38,7 @@ export const Dashboard: React.FC = () => {
   ]);
   const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [systemLogs, setSystemLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,7 +48,7 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const fetchStats = async () => {
-    const [sData, tData, aData, cStats, eData, absentData, allStudents, manualAlerts] = await Promise.all([
+    const [sData, tData, aData, cStats, eData, absentData, allStudents, manualAlerts, logData] = await Promise.all([
       sbFetch<any>('students', 'GET', null, '?select=id'),
       sbFetch<any>('staff', 'GET', null, '?select=id'),
       sbFetch<any>('attendance', 'GET', null, '?select=id,student_id,status,recorded_at'),
@@ -55,7 +56,8 @@ export const Dashboard: React.FC = () => {
       sbFetch<any>('envelopes', 'GET', null, '?select=status,committee_id,envelope_no,updated_at,committees(name)'),
       sbFetch<any>('v_absent_students', 'GET', null, '?select=*&limit=5'),
       sbFetch<any>('students', 'GET', null, '?select=id,committee_name'),
-      sbFetch<any>('alerts', 'GET', null, '?order=created_at.desc&limit=5')
+      sbFetch<any>('alerts', 'GET', null, '?order=created_at.desc&limit=5'),
+      sbFetch<any>('system_logs', 'GET', null, '?order=created_at.desc&limit=10&select=*,staff(full_name)')
     ]);
 
     const totalStudents = sData?.length || 0;
@@ -169,6 +171,7 @@ export const Dashboard: React.FC = () => {
     });
 
     setAlerts(sortedAlerts.slice(0, 5));
+    if (logData) setSystemLogs(logData);
 
     if (aData) {
       const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
@@ -362,23 +365,30 @@ export const Dashboard: React.FC = () => {
         <div className="bg-card border border-border rounded-2xl p-5">
           <h3 className="font-bold text-sm mb-6 flex items-center gap-2">
             <Clock size={18} className="text-accent" />
-            النشاط الأخير
+            سجل العمليات الأخير
           </h3>
-          <div className="space-y-4">
-            {alerts.length > 0 ? alerts.map((item) => (
-              <div key={item.id} className="flex items-center gap-3">
+          <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+            {systemLogs.length > 0 ? systemLogs.map((log) => (
+              <div key={log.id} className="flex items-start gap-3 group">
                 <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                  item.type === 'success' && "bg-green/10 text-green",
-                  item.type === 'info' && "bg-accent/10 text-accent",
-                  item.type === 'error' && "bg-red/10 text-red",
-                  item.type === 'warning' && "bg-gold/10 text-gold"
+                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-110",
+                  log.category === 'attendance' && "bg-green/10 text-green",
+                  log.category === 'envelope' && "bg-blue/10 text-blue",
+                  log.category === 'auth' && "bg-purple/10 text-purple",
+                  log.category === 'data' && "bg-gold/10 text-gold",
+                  log.severity === 'error' && "bg-red/10 text-red"
                 )}>
-                  <item.icon size={14} />
+                  {log.category === 'attendance' ? <CheckCircle2 size={14} /> : 
+                   log.category === 'envelope' ? <Package size={14} /> : 
+                   log.category === 'auth' ? <Users size={14} /> : <RefreshCw size={14} />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-text truncate">{item.title}</p>
-                  <p className="text-[10px] text-text3 truncate">{item.time}</p>
+                  <p className="text-xs font-bold text-text truncate">{log.action}</p>
+                  <p className="text-[10px] text-text3 flex items-center gap-1">
+                    <span className="font-medium text-accent">{log.staff?.full_name || 'النظام'}</span>
+                    <span>•</span>
+                    <span>{new Date(log.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </p>
                 </div>
               </div>
             )) : (
