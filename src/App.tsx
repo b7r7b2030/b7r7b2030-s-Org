@@ -15,6 +15,7 @@ import { Alerts } from './pages/Alerts';
 import { Reports } from './pages/Reports';
 import { Analytics } from './pages/Analytics';
 import { Setup } from './pages/Setup';
+import { GeneralSettings } from './pages/GeneralSettings';
 import { ExamSchedulePage } from './pages/ExamSchedule';
 import { TeacherAssignment } from './pages/TeacherAssignment';
 import { Diagnostics } from './pages/Diagnostics';
@@ -79,7 +80,8 @@ export default function App() {
     qrcodes: { title: 'إدارة رموز QR', subtitle: 'إنشاء وطباعة رموز QR للمعلمين والمظاريف واللجان' },
     reports: { title: 'التقارير الذكية', subtitle: 'تقارير شاملة وقابلة للتصدير لجميع عمليات الاختبارات' },
     analytics: { title: 'التحليلات المتقدمة', subtitle: 'رؤى ذكية لتحسين العملية التعليمية' },
-    setup: { title: 'إعداد النظام', subtitle: 'إعداد قاعدة البيانات السحابية وإنشاء الجداول' },
+    'general-settings': { title: 'إعدادات المنشأة', subtitle: 'تخصيص بيانات المدرسة والشعار والتقارير' },
+    setup: { title: 'إعداد قاعدة البيانات', subtitle: 'إعداد الجداول والسياسات الأمنية للسحابة' },
     examschedule: { title: 'جدول الاختبارات', subtitle: 'إعداد وتوزيع المواد على الأيام والفترات' },
     teacherassignment: { title: 'توزيع المعلمين', subtitle: 'توزيع المراقبين على اللجان لكل يوم وفترة' },
     diagnostics: { title: 'تشخيص النظام', subtitle: 'مراقبة أداء قاعدة البيانات وسجلات الرقابة الشامله' },
@@ -110,6 +112,7 @@ export default function App() {
       case 'reports': return <Reports />;
       case 'official-reports': return <OfficialReports />;
       case 'analytics': return <Analytics />;
+      case 'general-settings': return <GeneralSettings />;
       case 'setup': return <Setup />;
       case 'examschedule': return <ExamSchedulePage />;
       case 'teacherassignment': return <TeacherAssignment />;

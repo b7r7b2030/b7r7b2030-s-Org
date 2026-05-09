@@ -21,7 +21,8 @@ import {
   X,
   Calendar,
   AlertTriangle,
-  ClipboardCheck
+  ClipboardCheck,
+  Database
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -58,7 +59,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'reports', label: 'التقارير السريعة', icon: BarChart3, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR, UserRole.CONTROL] },
     { id: 'official-reports', label: 'التقارير الرسمية', icon: FileText, roles: [UserRole.PRINCIPAL, UserRole.CONTROL] },
     { id: 'analytics', label: 'تحليل', icon: TrendingUp, roles: [UserRole.PRINCIPAL, UserRole.COUNSELOR, UserRole.CONTROL] },
-    { id: 'setup', label: 'إعداد', icon: Settings, roles: [UserRole.PRINCIPAL] },
+    { id: 'general-settings', label: 'إعدادات المدرسة', icon: Settings, roles: [UserRole.PRINCIPAL] },
+    { id: 'setup', label: 'قاعدة البيانات', icon: Database, roles: [UserRole.PRINCIPAL] },
     { id: 'diagnostics', label: 'حالة النظام', icon: ClipboardCheck, roles: [UserRole.PRINCIPAL] },
   ];
 

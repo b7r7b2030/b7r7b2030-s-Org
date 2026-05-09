@@ -205,6 +205,23 @@ CREATE TABLE IF NOT EXISTS alerts (
     created_at  TIMESTAMPTZ DEFAULT now()
 );
 
+-- جدول إعدادات النظام والمدرسة
+CREATE TABLE IF NOT EXISTS settings (
+    id          TEXT        PRIMARY KEY, -- 'school_info', 'system_config'
+    data        JSONB       NOT NULL,
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- إدراج بيانات المدرسة الافتراضية
+INSERT INTO settings (id, data)
+VALUES ('school_info', '{
+    "school_name": "مدرسة التميز الثانوية",
+    "district": "إدارة تعليم المنطقة",
+    "principal": "مدير المجمع التعليمي",
+    "logo_url": ""
+}')
+ON CONFLICT (id) DO NOTHING;
+
 -- 3. تفعيل RLS وإنشاء السياسات بأمان
 DO $$ 
 DECLARE

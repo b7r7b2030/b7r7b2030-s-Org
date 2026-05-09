@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { sbFetch } from '../services/supabase';
 
 interface PrintLayoutProps {
   title: string;
@@ -8,6 +9,22 @@ interface PrintLayoutProps {
 
 export const PrintLayout: React.FC<PrintLayoutProps> = ({ title, subtitle, children }) => {
   const today = new Date().toLocaleDateString('ar-SA');
+  const [schoolInfo, setSchoolInfo] = useState({
+    school_name: '........................',
+    district: '............................',
+    principal: '............................',
+    logo_url: ''
+  });
+
+  useEffect(() => {
+    const fetchInfo = async () => {
+      const res = await sbFetch<{data: any}>('settings', 'GET', null, '?id=eq.school_info');
+      if (res && res.length > 0) {
+        setSchoolInfo(res[0].data);
+      }
+    };
+    fetchInfo();
+  }, []);
 
   return (
     <div className="print-container bg-white text-black p-[2cm] min-h-[29.7cm] w-[21cm] mx-auto shadow-sm print:shadow-none print:m-0 print:p-[1.5cm] dir-rtl">
@@ -16,13 +33,17 @@ export const PrintLayout: React.FC<PrintLayoutProps> = ({ title, subtitle, child
         <div className="text-right space-y-1">
           <p className="font-bold text-lg">المملكة العربية السعودية</p>
           <p className="font-bold">وزارة التعليم</p>
-          <p className="text-sm">إدارة التعليم بمحافظة ............</p>
-          <p className="text-sm font-bold">مدرسة ........................</p>
+          <p className="text-sm">إدارة التعليم: {schoolInfo.district}</p>
+          <p className="text-sm font-bold">المدرسة: {schoolInfo.school_name}</p>
         </div>
         <div className="text-center">
-          <div className="w-20 h-20 bg-gray-100 border border-dashed border-gray-400 flex items-center justify-center text-[10px] text-gray-400 mb-2 mx-auto">
-            شعار الوزارة
-          </div>
+          {schoolInfo.logo_url ? (
+            <img src={schoolInfo.logo_url} alt="Logo" className="w-20 h-20 object-contain mb-2 mx-auto" />
+          ) : (
+            <div className="w-20 h-20 bg-gray-100 border border-dashed border-gray-400 flex items-center justify-center text-[10px] text-gray-400 mb-2 mx-auto">
+              شعار الوزارة
+            </div>
+          )}
           <h1 className="font-black text-xl underline underline-offset-8 decoration-2">{title}</h1>
           {subtitle && <p className="text-sm mt-2 text-gray-600 italic">{subtitle}</p>}
         </div>
@@ -53,7 +74,7 @@ export const PrintLayout: React.FC<PrintLayoutProps> = ({ title, subtitle, child
         <div className="space-y-4">
           <p>مدير المدرسة</p>
           <div className="h-10 border-b border-gray-300 w-3/4 mx-auto"></div>
-          <p className="text-xs font-normal">............................</p>
+          <p className="text-xs font-normal">{schoolInfo.principal}</p>
         </div>
       </div>
 
