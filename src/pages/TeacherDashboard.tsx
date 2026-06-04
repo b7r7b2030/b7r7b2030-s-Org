@@ -34,16 +34,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
   const [students, setStudents] = useState<Student[]>([]);
   const [attendance, setAttendance] = useState<Record<string, 'present' | 'absent' | 'late'>>({});
 
-  const gradeOrder: Record<string, number> = {
-    'أول ثانوي': 1,
-    'الأول الثانوي': 1,
-    'الأول': 1,
-    'ثاني ثانوي': 2,
-    'الثاني الثانوي': 2,
-    'الثاني': 2,
-    'ثالث ثانوي': 3,
-    'الثالث الثانوي': 3,
-    'الثالث': 3
+  const getGradeOrder = (g: string) => {
+    if (!g) return 99;
+    const normalized = g.trim().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
+    if (normalized.includes('اول') || normalized.includes('الاول') || normalized === '1' || normalized.includes('1')) return 1;
+    if (normalized.includes('ثاني') || normalized.includes('الثاني') || normalized === '2' || normalized.includes('2')) return 2;
+    if (normalized.includes('ثالث') || normalized.includes('الثالث') || normalized === '3' || normalized.includes('3')) return 3;
+    return 99;
   };
 
   const [isDelivering, setIsDelivering] = useState(false);
@@ -133,10 +130,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
           const sData = await sbFetch<Student>('students', 'GET', null, `?committee_name=eq.${currentCommittee.name}`);
           if (sData) {
             const sorted = [...sData].sort((a, b) => {
-              const orderA = gradeOrder[a.grade] || 99;
-              const orderB = gradeOrder[b.grade] || 99;
+              const orderA = getGradeOrder(a.grade);
+              const orderB = getGradeOrder(b.grade);
               if (orderA !== orderB) return orderA - orderB;
-              return parseInt(a.seat_no || '0') - parseInt(b.seat_no || '0');
+              return (a.full_name || '').localeCompare(b.full_name || '', 'ar');
             });
             setStudents(sorted);
             
@@ -411,23 +408,35 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
               </div>
 
               <div className="flex items-center gap-2">
-                {attendance[s.id!] === 'absent' ? (
-                  <button 
-                    onClick={() => s.id && handleAttendance(s.id, 'present')}
-                    className="flex items-center gap-2 px-4 py-2 bg-green text-white rounded-xl font-bold text-xs shadow-lg shadow-green/20 animate-in zoom-in duration-300"
-                  >
-                    <CheckCircle2 size={16} />
-                    تراجع عن الغياب
-                  </button>
-                ) : (
-                  <button 
-                    onClick={() => s.id && handleAttendance(s.id, 'absent')}
-                    className="flex items-center gap-2 px-4 py-2 bg-red/10 text-red border border-red/20 rounded-xl font-bold text-xs hover:bg-red hover:text-white transition-all"
-                  >
-                    <XCircle size={16} />
-                    تسجيل غياب
-                  </button>
-                )}
+                {/* Present Button - Active/Default highlighted in elegant green */}
+                <button
+                  onClick={() => s.id && handleAttendance(s.id, 'present')}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition-all duration-300",
+                    attendance[s.id!] !== 'absent'
+                      ? "bg-green text-white shadow-lg shadow-green/20 scale-105"
+                      : "bg-green/10 text-green hover:bg-green hover:text-white"
+                  )}
+                  title="حاضر"
+                >
+                  <CheckCircle2 size={15} />
+                  <span>حاضر</span>
+                </button>
+                
+                {/* Absent Button - highlighted in vivid red if clicked */}
+                <button
+                  onClick={() => s.id && handleAttendance(s.id, 'absent')}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition-all duration-300",
+                    attendance[s.id!] === 'absent'
+                      ? "bg-red text-white shadow-lg shadow-red/20 scale-105"
+                      : "bg-red/10 text-red hover:bg-red hover:text-white"
+                  )}
+                  title="غائب"
+                >
+                  <XCircle size={15} />
+                  <span>غائب</span>
+                </button>
               </div>
             </div>
           ))}

@@ -32,16 +32,13 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
   const [search, setSearch] = useState('');
   const [attendanceMap, setAttendanceMap] = useState<Record<string, string>>({});
 
-  const gradeOrder: Record<string, number> = {
-    'أول ثانوي': 1,
-    'الأول الثانوي': 1,
-    'الأول': 1,
-    'ثاني ثانوي': 2,
-    'الثاني الثانوي': 2,
-    'الثاني': 2,
-    'ثالث ثانوي': 3,
-    'الثالث الثانوي': 3,
-    'الثالث': 3
+  const getGradeOrder = (g: string) => {
+    if (!g) return 99;
+    const normalized = g.trim().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
+    if (normalized.includes('اول') || normalized.includes('الاول') || normalized === '1' || normalized.includes('1')) return 1;
+    if (normalized.includes('ثاني') || normalized.includes('الثاني') || normalized === '2' || normalized.includes('2')) return 2;
+    if (normalized.includes('ثالث') || normalized.includes('الثالث') || normalized === '3' || normalized.includes('3')) return 3;
+    return 99;
   };
 
   useEffect(() => {
@@ -101,10 +98,10 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
     .filter(s => normalizeCommitteeName(s.committee_name || '') === normalizeCommitteeName(selectedCommittee))
     .filter(s => s.full_name.includes(search) || s.student_no.includes(search))
     .sort((a, b) => {
-      const orderA = gradeOrder[a.grade] || 99;
-      const orderB = gradeOrder[b.grade] || 99;
+      const orderA = getGradeOrder(a.grade);
+      const orderB = getGradeOrder(b.grade);
       if (orderA !== orderB) return orderA - orderB;
-      return parseInt(a.seat_no || '0') - parseInt(b.seat_no || '0');
+      return (a.full_name || '').localeCompare(b.full_name || '', 'ar');
     });
 
   const calculateStats = () => {
@@ -253,9 +250,9 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
                       <td className="px-6 py-4">
                         <span className={cn(
                           "px-2 py-0.5 text-[10px] font-bold rounded-md border",
-                          gradeOrder[s.grade] === 1 && "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                          gradeOrder[s.grade] === 2 && "bg-purple-500/10 text-purple-400 border-purple-500/20",
-                          gradeOrder[s.grade] === 3 && "bg-gold/10 text-gold border-gold/20"
+                          getGradeOrder(s.grade) === 1 && "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                          getGradeOrder(s.grade) === 2 && "bg-purple-500/10 text-purple-400 border-purple-500/20",
+                          getGradeOrder(s.grade) === 3 && "bg-gold/10 text-gold border-gold/20"
                         )}>
                           {s.grade}
                         </span>
