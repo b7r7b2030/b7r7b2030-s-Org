@@ -114,26 +114,159 @@ export const Students: React.FC = () => {
         // Convert sheet to JSON (array of arrays)
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
         
-        // Skip header row and map data
-        const studentsToImport = jsonData.slice(1).map(row => ({
-          student_no: String(row[1] || '').trim(), // السجل المدني (Column B)
-          full_name: String(row[2] || '').trim(), // اسم الطالب (Column C)
-          grade: String(row[3] || '').trim(), // الصف (Column D)
-          grade_code: String(row[4] || '').trim(), // رمز الصف (Column E)
-          classroom: String(row[5] || '').trim(), // الفصل (Column F)
-          committee_name: String(row[6] || '').trim(), // اللجنة (Column G)
-          seat_no: String(row[7] || '').trim(), // رقم الجلوس (Column H)
-        })).filter(s => s.student_no && s.full_name);
-
-        if (studentsToImport.length === 0) {
+        if (jsonData.length === 0) {
           alert('الملف فارغ أو لا يحتوي على بيانات صحيحة');
           setImporting(false);
           return;
         }
 
+        // Helper to normalize Arabic characters for robust match
+        const normalizeArabic = (str: string) => {
+          if (!str) return '';
+          return String(str)
+            .trim()
+            .replace(/[أإآ]/g, 'ا')
+            .replace(/ة/g, 'ه')
+            .replace(/\s+/g, ' ')
+            .toLowerCase();
+        };
+
+        // Scan first 6 rows to find the one with most keywords (our header row)
+        let headerRowIndex = 0;
+        let maxScore = -1;
+        const keywords = ['اسم', 'طالب', 'هويه', 'سجل', 'رقم', 'صف', 'فصل', 'لجنه', 'لجنة', 'جلوس', 'جوال', 'هاتف'];
+        
+        for (let r = 0; r < Math.min(6, jsonData.length); r++) {
+          const row = jsonData[r] || [];
+          let score = 0;
+          for (const cell of row) {
+            const cellStr = normalizeArabic(String(cell || ''));
+            if (keywords.some(kw => cellStr.includes(kw))) {
+              score++;
+            }
+          }
+          if (score > maxScore && score >= 2) {
+            maxScore = score;
+            headerRowIndex = r;
+          }
+        }
+
+        const headerRow = jsonData[headerRowIndex] || [];
+
+        // Match column indices dynamically based on headerRow
+        let colIndices = {
+          student_no: -1,
+          full_name: -1,
+          grade: -1,
+          grade_code: -1,
+          classroom: -1,
+          committee_name: -1,
+          seat_no: -1,
+          phone: -1
+        };
+
+        headerRow.forEach((cell, idx) => {
+          const val = normalizeArabic(String(cell || ''));
+          if (!val) return;
+
+          if (val.includes('جلوس') || val.includes('مقعد')) {
+            colIndices.seat_no = idx;
+          } else if (val.includes('جوال') || val.includes('هاتف') || val.includes('تليفون') || val.includes('موبايل')) {
+            colIndices.phone = idx;
+          } else if (val.includes('رمز')) {
+            colIndices.grade_code = idx;
+          } else if (val.includes('لجنه') || val.includes('لجنة')) {
+            colIndices.committee_name = idx;
+          } else if (val === 'الصف' || val === 'صف' || val.includes('المستوي') || val.includes('المرحلة') || val.includes('مرحله') || val.includes('كود الصف')) {
+            colIndices.grade = idx;
+          } else if (val === 'الفصل' || val === 'فصل' || val.includes('شعبه') || val.includes('شعبة')) {
+            colIndices.classroom = idx;
+          } else if (val.includes('اسم') && (val.includes('طالب') || val === 'الاسم' || val === 'اسم' || val.includes('اسم الطالب'))) {
+            colIndices.full_name = idx;
+          } else if (val.includes('سجل') || val.includes('هويه') || val.includes('هوية') || val.includes('وطني') || val.includes('اكاديمي') || val.includes('رقم الطالب') || val === 'الكود') {
+            colIndices.student_no = idx;
+          }
+        });
+
+        // Smart fallbacks
+        if (colIndices.full_name === -1) {
+          colIndices.full_name = headerRow.findIndex(cell => normalizeArabic(String(cell || '')).includes('اسم'));
+        }
+        if (colIndices.student_no === -1) {
+          colIndices.student_no = headerRow.findIndex(cell => {
+            const v = normalizeArabic(String(cell || ''));
+            return v.includes('سجل') || v.includes('هويه') || v.includes('طالب') || v.includes('رقم');
+          });
+        }
+        if (colIndices.grade === -1) {
+          colIndices.grade = headerRow.findIndex(cell => normalizeArabic(String(cell || '')).includes('صف'));
+        }
+        if (colIndices.classroom === -1) {
+          colIndices.classroom = headerRow.findIndex(cell => {
+            const v = normalizeArabic(String(cell || ''));
+            return v.includes('فصل') || v.includes('شعب');
+          });
+        }
+        if (colIndices.committee_name === -1) {
+          colIndices.committee_name = headerRow.findIndex(cell => normalizeArabic(String(cell || '')).includes('لجن'));
+        }
+        if (colIndices.seat_no === -1) {
+          colIndices.seat_no = headerRow.findIndex(cell => normalizeArabic(String(cell || '')).includes('جلوس'));
+        }
+        if (colIndices.phone === -1) {
+          colIndices.phone = headerRow.findIndex(cell => {
+            const v = normalizeArabic(String(cell || ''));
+            return v.includes('جوال') || v.includes('هاتف');
+          });
+        }
+
+        // If completely failed to detect any headers, fallback to previous column sequence
+        const useStandardFallback = Object.values(colIndices).every(idx => idx === -1);
+        if (useStandardFallback) {
+          colIndices = {
+            student_no: 1, // B
+            full_name: 2,  // C
+            grade: 3,      // D
+            grade_code: 4, // E
+            classroom: 5,  // F
+            committee_name: 6, // G
+            seat_no: 7,    // H
+            phone: 8
+          };
+        }
+
+        const rawRows = jsonData.slice(headerRowIndex + 1);
+
+        const cleanCommitteeName = (v: string) => {
+          if (!v) return '';
+          return v.trim().replace(/^(لجنة|لجنه)\s*/, '').trim();
+        };
+
+        const studentsToImport = rawRows.map(row => {
+          const getVal = (idx: number) => {
+            if (idx === -1 || idx >= row.length) return '';
+            return String(row[idx] ?? '').trim();
+          };
+
+          return {
+            student_no: getVal(colIndices.student_no),
+            full_name: getVal(colIndices.full_name),
+            grade: getVal(colIndices.grade),
+            grade_code: colIndices.grade_code !== -1 ? getVal(colIndices.grade_code) : undefined,
+            classroom: getVal(colIndices.classroom) || '1',
+            committee_name: cleanCommitteeName(getVal(colIndices.committee_name)),
+            seat_no: colIndices.seat_no !== -1 ? getVal(colIndices.seat_no) : undefined,
+            phone: colIndices.phone !== -1 ? getVal(colIndices.phone) : undefined,
+          };
+        }).filter(s => s.student_no && s.full_name);
+
+        if (studentsToImport.length === 0) {
+          alert('الملف فارغ أو لا يحتوي على بيانات صحيحة للطلاب');
+          setImporting(false);
+          return;
+        }
+
         let successCount = 0;
-        // Batch insert would be better, but sbFetch currently does single POST
-        // Let's do them in chunks or one by one for now as per previous logic
         for (const student of studentsToImport) {
           const res = await sbFetch('students', 'POST', student);
           if (res) successCount++;

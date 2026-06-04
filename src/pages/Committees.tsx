@@ -60,18 +60,25 @@ export const Committees: React.FC = () => {
     setLoading(false);
   };
 
+  const normalizeCommitteeName = (name: string) => {
+    if (!name) return '';
+    return name.trim().replace(/^(لجنة|لجنه)\s*/, '').trim();
+  };
+
   const handleSyncCommittees = async () => {
     setSyncing(true);
     try {
-      // Extract unique committee names from students
-      const uniqueCommitteeNames = Array.from(new Set(students.map(s => s.committee_name).filter(Boolean)));
+      // Extract unique committee names from students, clean them
+      const rawNames = students.map(s => s.committee_name).filter(Boolean);
+      const uniqueCommitteeNames = Array.from(new Set(rawNames.map(name => normalizeCommitteeName(name!))));
       
       // For each unique name, if it doesn't exist in committees, create it
       for (const name of uniqueCommitteeNames) {
-        const exists = committees.find(c => c.name === name);
+        if (!name) continue;
+        const exists = committees.find(c => normalizeCommitteeName(c.name) === name);
         if (!exists) {
           const newCommittee = {
-            name: name!,
+            name: name,
             subject: 'غير محدد',
             exam_date: new Date().toISOString().split('T')[0],
             start_time: '08:00',
@@ -91,15 +98,36 @@ export const Committees: React.FC = () => {
   };
 
   const getStudentCount = (committeeName: string) => {
-    return students.filter(s => s.committee_name === committeeName).length;
+    const normC = normalizeCommitteeName(committeeName);
+    return students.filter(s => normalizeCommitteeName(s.committee_name || '') === normC).length;
   };
 
   const getGradeCounts = (committeeName: string) => {
-    const committeeStudents = students.filter(s => s.committee_name === committeeName);
+    const normC = normalizeCommitteeName(committeeName);
+    const committeeStudents = students.filter(s => normalizeCommitteeName(s.committee_name || '') === normC);
+    
+    const isFirst = (g: string) => {
+      if (!g) return false;
+      const normalized = g.trim().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
+      return normalized.includes('اول') || normalized.includes('الاول') || normalized === '1' || normalized.includes('1');
+    };
+    
+    const isSecond = (g: string) => {
+      if (!g) return false;
+      const normalized = g.trim().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
+      return normalized.includes('ثاني') || normalized.includes('الثاني') || normalized === '2' || normalized.includes('2');
+    };
+    
+    const isThird = (g: string) => {
+      if (!g) return false;
+      const normalized = g.trim().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
+      return normalized.includes('ثالث') || normalized.includes('الثالث') || normalized === '3' || normalized.includes('3');
+    };
+
     return {
-      first: committeeStudents.filter(s => s.grade.includes('الأول')).length,
-      second: committeeStudents.filter(s => s.grade.includes('الثاني')).length,
-      third: committeeStudents.filter(s => s.grade.includes('الثالث')).length
+      first: committeeStudents.filter(s => isFirst(s.grade)).length,
+      second: committeeStudents.filter(s => isSecond(s.grade)).length,
+      third: committeeStudents.filter(s => isThird(s.grade)).length
     };
   };
 

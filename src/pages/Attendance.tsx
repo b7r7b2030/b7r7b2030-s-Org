@@ -73,8 +73,14 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
     setLoading(false);
   };
 
+  const normalizeCommitteeName = (name: string) => {
+    if (!name) return '';
+    return name.trim().replace(/^(لجنة|لجنه)\s*/, '').trim();
+  };
+
   const markStatus = async (studentId: string, status: string) => {
-    const committeeId = committees.find(c => c.name === selectedCommittee)?.id;
+    const normSel = normalizeCommitteeName(selectedCommittee);
+    const committeeId = committees.find(c => normalizeCommitteeName(c.name) === normSel)?.id;
     if (!committeeId) return;
 
     const res = await sbFetch('attendance', 'POST', {
@@ -92,7 +98,7 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
   };
 
   const filteredStudents = students
-    .filter(s => s.committee_name === selectedCommittee)
+    .filter(s => normalizeCommitteeName(s.committee_name || '') === normalizeCommitteeName(selectedCommittee))
     .filter(s => s.full_name.includes(search) || s.student_no.includes(search))
     .sort((a, b) => {
       const orderA = gradeOrder[a.grade] || 99;
@@ -108,7 +114,8 @@ export const Attendance: React.FC<{ userRole?: UserRole, user: User }> = ({ user
 
     students.forEach(s => {
       const status = attendanceMap[s.id!];
-      const committeeId = committees.find(c => c.name === s.committee_name)?.id;
+      const normS = normalizeCommitteeName(s.committee_name || '');
+      const committeeId = committees.find(c => normalizeCommitteeName(c.name) === normS)?.id;
       const committeeStatus = envelopes.find(e => e.committee_id === committeeId)?.status;
       
       if (status === 'present' || (!status && committeeStatus === 'in_progress')) {
