@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   UserSquare2, 
   Upload, 
@@ -17,6 +17,7 @@ import {
   User as UserIcon
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import * as XLSX from 'xlsx';
 import { cn } from '../lib/utils';
 import { Staff, UserRole } from '../types';
 import { sbFetch } from '../services/supabase';
@@ -25,6 +26,7 @@ export const Teachers: React.FC = () => {
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
   const [formData, setFormData] = useState({
@@ -33,6 +35,8 @@ export const Teachers: React.FC = () => {
     phone: '',
     role: UserRole.TEACHER as UserRole
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchStaff();
@@ -45,6 +49,158 @@ export const Teachers: React.FC = () => {
       setStaffList(data);
     }
     setLoading(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+        if (jsonData.length === 0) {
+          alert('الملف فارغ أو لا يحتوي على بيانات صحيحة');
+          setImporting(false);
+          return;
+        }
+
+        const normalizeArabic = (str: string) => {
+          if (!str) return '';
+          return String(str)
+            .trim()
+            .replace(/[أإآ]/g, 'ا')
+            .replace(/ة/g, 'ه')
+            .replace(/\s+/g, ' ')
+            .toLowerCase();
+        };
+
+        let headerRowIndex = 0;
+        let maxScore = -1;
+        const keywords = ['اسم', 'معلم', 'موظف', 'طاقم', 'سجل', 'هويه', 'هوية', 'جوال', 'هاتف', 'وطني', 'تليفون', 'موبايل', 'اسم المعلم', 'رقم الجوال'];
+
+        for (let r = 0; r < Math.min(6, jsonData.length); r++) {
+          const row = jsonData[r] || [];
+          let score = 0;
+          for (const cell of row) {
+            const cellStr = normalizeArabic(String(cell || ''));
+            if (keywords.some(kw => cellStr.includes(kw))) {
+              score++;
+            }
+          }
+          if (score > maxScore && score >= 1) {
+            maxScore = score;
+            headerRowIndex = r;
+          }
+        }
+
+        const headerRow = jsonData[headerRowIndex] || [];
+
+        let colIndices = {
+          national_id: -1,
+          full_name: -1,
+          phone: -1
+        };
+
+        headerRow.forEach((cell, idx) => {
+          const val = normalizeArabic(String(cell || ''));
+          if (!val) return;
+
+          if (val.includes('جوال') || val.includes('هاتف') || val.includes('تليفون') || val.includes('موبايل')) {
+            colIndices.phone = idx;
+          } else if (val.includes('اسم') && (val.includes('طالب') || val.includes('معلم') || val.includes('موظف') || val === 'الاسم' || val === 'اسم' || val.includes('طاقم'))) {
+            colIndices.full_name = idx;
+          } else if (val.includes('سجل') || val.includes('هويه') || val.includes('هوية') || val.includes('وطني') || val.includes('اكاديمي') || val.includes('رقم المعلم') || val.includes('رقم الموظف') || val.includes('كود') || val === 'الكود' || val.includes('رقم الدخول') || val.includes('رقم')) {
+            colIndices.national_id = idx;
+          }
+        });
+
+        if (colIndices.full_name === -1) {
+          colIndices.full_name = headerRow.findIndex(cell => {
+            const v = normalizeArabic(String(cell || ''));
+            return v.includes('اسم');
+          });
+        }
+        if (colIndices.national_id === -1) {
+          colIndices.national_id = headerRow.findIndex(cell => {
+            const v = normalizeArabic(String(cell || ''));
+            return v.includes('سجل') || v.includes('هويه') || v.includes('رقم') || v.includes('كود') || v.includes('هوية');
+          });
+        }
+        if (colIndices.phone === -1) {
+          colIndices.phone = headerRow.findIndex(cell => {
+            const v = normalizeArabic(String(cell || ''));
+            return v.includes('جوال') || v.includes('هاتف') || v.includes('موبايل');
+          });
+        }
+
+        if (colIndices.full_name === -1 && colIndices.national_id === -1) {
+          colIndices = {
+            national_id: 0,
+            full_name: 1,
+            phone: 2
+          };
+        }
+
+        const rawRows = jsonData.slice(headerRowIndex + 1);
+
+        const staffToImport = rawRows.map(row => {
+          const getVal = (idx: number) => {
+            if (idx === -1 || idx >= row.length) return '';
+            return String(row[idx] ?? '').trim();
+          };
+
+          return {
+            national_id: getVal(colIndices.national_id),
+            full_name: getVal(colIndices.full_name),
+            phone: getVal(colIndices.phone),
+            role: UserRole.TEACHER as UserRole
+          };
+        }).filter(s => s.national_id && s.full_name);
+
+        if (staffToImport.length === 0) {
+          alert('الملف فارغ أو لا يحتوي على بيانات صحيحة للموظفين');
+          setImporting(false);
+          return;
+        }
+
+        const existingData = await sbFetch<Staff>('staff', 'GET', null, '?select=national_id');
+        const existingIds = new Set(existingData?.map(e => e.national_id) || []);
+
+        const uniqueStaffToImport = staffToImport.filter(s => !existingIds.has(s.national_id));
+
+        if (uniqueStaffToImport.length === 0) {
+          alert('جميع الموظفين في الملف مسجلون مسبقاً بالفعل');
+          setImporting(false);
+          return;
+        }
+
+        let successCount = 0;
+        for (const staffMember of uniqueStaffToImport) {
+          const res = await sbFetch('staff', 'POST', staffMember);
+          if (res) successCount++;
+        }
+
+        alert(`تم استيراد عدد ${successCount} موظف/معلم بنجاح كمعلمين افتراضياً.`);
+        fetchStaff();
+      } catch (error) {
+        console.error('Error importing staff:', error);
+        alert('حدث خطأ أثناء قراءة ملف Excel');
+      } finally {
+        setImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
   };
 
   const handleAddStaff = async () => {
@@ -105,12 +261,31 @@ export const Teachers: React.FC = () => {
             <Upload size={18} className="text-accent" />
             إدارة طاقم العمل (المستخدمين)
           </h3>
-          <div className="border-2 border-dashed border-border rounded-2xl p-8 text-center cursor-pointer hover:bg-accent/5 hover:border-accent transition-all group">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            accept=".xlsx, .xls, .csv" 
+            className="hidden" 
+          />
+          <div 
+            onClick={() => !importing && fileInputRef.current?.click()}
+            className={cn(
+              "border-2 border-dashed border-border rounded-2xl p-8 text-center cursor-pointer hover:bg-accent/5 hover:border-accent transition-all group",
+              importing && "pointer-events-none opacity-50"
+            )}
+          >
             <div className="w-14 h-14 bg-bg3 rounded-2xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-              <Upload size={28} className="text-text3 group-hover:text-accent" />
+              {importing ? (
+                <Loader2 size={28} className="text-accent animate-spin" />
+              ) : (
+                <Upload size={28} className="text-text3 group-hover:text-accent" />
+              )}
             </div>
-            <h4 className="font-bold text-text text-sm mb-1">رفع ملف Excel للطاقم</h4>
-            <p className="text-[10px] text-text3">الاسم، السجل المدني، الجوال، الصلاحية</p>
+            <h4 className="font-bold text-text text-sm mb-1">
+              {importing ? 'جاري الاستيراد...' : 'رفع ملف Excel للطاقم'}
+            </h4>
+            <p className="text-[10px] text-text3">اسم المعلم، السجل المدني، رقم الجوال (يتم التعيين كمعلم افتراضياً)</p>
           </div>
           
           <div className="relative my-6">
