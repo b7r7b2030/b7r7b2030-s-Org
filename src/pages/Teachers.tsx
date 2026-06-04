@@ -29,6 +29,7 @@ export const Teachers: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
+  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [formData, setFormData] = useState({
     national_id: '',
     full_name: '',
@@ -229,6 +230,32 @@ export const Teachers: React.FC = () => {
     }
   };
 
+  const handleUpdateStaff = async () => {
+    if (!editingStaff || !editingStaff.id) return;
+    if (!formData.national_id || !formData.full_name || !formData.role) {
+      alert('يرجى تعبئة جميع الحقول الإلزامية');
+      return;
+    }
+
+    setAdding(true);
+    try {
+      const res = await sbFetch<Staff>('staff', 'PATCH', formData, `?id=eq.${editingStaff.id}`);
+      if (res) {
+        alert('تم تعديل بيانات الموظف بنجاح');
+        setEditingStaff(null);
+        setFormData({ national_id: '', full_name: '', phone: '', role: UserRole.TEACHER });
+        fetchStaff();
+      } else {
+        alert('حدث خطأ أثناء تعديل بيانات الموظف.');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('حدث خطأ غير متوقع');
+    } finally {
+      setAdding(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('هل أنت متأكد من حذف هذا الموظف؟')) return;
     const res = await sbFetch('staff', 'DELETE', null, `?id=eq.${id}`);
@@ -257,41 +284,64 @@ export const Teachers: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Add/Import Section */}
         <div className="bg-card border border-border rounded-2xl p-6">
-          <h3 className="font-bold text-sm mb-4 flex items-center gap-2">
-            <Upload size={18} className="text-accent" />
-            إدارة طاقم العمل (المستخدمين)
-          </h3>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileUpload} 
-            accept=".xlsx, .xls, .csv" 
-            className="hidden" 
-          />
-          <div 
-            onClick={() => !importing && fileInputRef.current?.click()}
-            className={cn(
-              "border-2 border-dashed border-border rounded-2xl p-8 text-center cursor-pointer hover:bg-accent/5 hover:border-accent transition-all group",
-              importing && "pointer-events-none opacity-50"
-            )}
-          >
-            <div className="w-14 h-14 bg-bg3 rounded-2xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-              {importing ? (
-                <Loader2 size={28} className="text-accent animate-spin" />
-              ) : (
-                <Upload size={28} className="text-text3 group-hover:text-accent" />
-              )}
+          {editingStaff ? (
+            <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
+              <h3 className="font-bold text-sm flex items-center gap-2 text-accent">
+                <Edit size={18} />
+                تعديل بيانات العضو | {editingStaff.full_name}
+              </h3>
+              <button 
+                onClick={() => {
+                  setEditingStaff(null);
+                  setFormData({ national_id: '', full_name: '', phone: '', role: UserRole.TEACHER });
+                }}
+                className="text-xs bg-bg3 border border-border px-3 py-1.5 rounded-lg text-text2 hover:text-red hover:border-red/30 transition-all font-bold"
+              >
+                إلغاء التعديل
+              </button>
             </div>
-            <h4 className="font-bold text-text text-sm mb-1">
-              {importing ? 'جاري الاستيراد...' : 'رفع ملف Excel للطاقم'}
-            </h4>
-            <p className="text-[10px] text-text3">اسم المعلم، السجل المدني، رقم الجوال (يتم التعيين كمعلم افتراضياً)</p>
-          </div>
-          
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border"></span></div>
-            <div className="relative flex justify-center text-[10px] uppercase font-bold"><span className="bg-card px-2 text-text3 tracking-widest">أو إضافة يدوية</span></div>
-          </div>
+          ) : (
+            <h3 className="font-bold text-sm mb-4 flex items-center gap-2">
+              <Upload size={18} className="text-accent" />
+              إدارة طاقم العمل (المستخدمين)
+            </h3>
+          )}
+
+          {!editingStaff && (
+            <>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileUpload} 
+                accept=".xlsx, .xls, .csv" 
+                className="hidden" 
+              />
+              <div 
+                onClick={() => !importing && fileInputRef.current?.click()}
+                className={cn(
+                  "border-2 border-dashed border-border rounded-2xl p-8 text-center cursor-pointer hover:bg-accent/5 hover:border-accent transition-all group",
+                  importing && "pointer-events-none opacity-50"
+                )}
+              >
+                <div className="w-14 h-14 bg-bg3 rounded-2xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                  {importing ? (
+                    <Loader2 size={28} className="text-accent animate-spin" />
+                  ) : (
+                    <Upload size={28} className="text-text3 group-hover:text-accent" />
+                  )}
+                </div>
+                <h4 className="font-bold text-text text-sm mb-1">
+                  {importing ? 'جاري الاستيراد...' : 'رفع ملف Excel للطاقم'}
+                </h4>
+                <p className="text-[10px] text-text3">اسم المعلم، السجل المدني، رقم الجوال (يتم التعيين كمعلم افتراضياً)</p>
+              </div>
+              
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border"></span></div>
+                <div className="relative flex justify-center text-[10px] uppercase font-bold"><span className="bg-card px-2 text-text3 tracking-widest">أو إضافة يدوية</span></div>
+              </div>
+            </>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -335,23 +385,44 @@ export const Teachers: React.FC = () => {
               </select>
             </div>
           </div>
-          <button 
-            onClick={handleAddStaff}
-            disabled={adding}
-            className="w-full mt-6 bg-accent text-white font-bold py-3 rounded-xl hover:bg-accent/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {adding ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                جاري الإضافة...
-              </>
-            ) : (
-              <>
-                <Plus size={18} />
-                إضافة للطاقم وتفعيل الكود
-              </>
-            )}
-          </button>
+
+          {editingStaff ? (
+            <button 
+              onClick={handleUpdateStaff}
+              disabled={adding}
+              className="w-full mt-6 bg-accent text-white font-bold py-3 rounded-xl hover:bg-accent/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {adding ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  جاري تعديل بيانات الموظف...
+                </>
+              ) : (
+                <>
+                  <ClipboardCheck size={18} />
+                  تحديث بيانات عضو الطاقم
+                </>
+              )}
+            </button>
+          ) : (
+            <button 
+              onClick={handleAddStaff}
+              disabled={adding}
+              className="w-full mt-6 bg-accent text-white font-bold py-3 rounded-xl hover:bg-accent/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {adding ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  جاري الإضافة...
+                </>
+              ) : (
+                <>
+                  <Plus size={18} />
+                  إضافة للطاقم وتفعيل الكود
+                </>
+              )}
+            </button>
+          )}
         </div>
 
         {/* QR Preview */}
@@ -448,7 +519,22 @@ export const Teachers: React.FC = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <button className="p-1.5 bg-bg3 text-text3 rounded-lg hover:text-accent transition-colors"><Edit size={14} /></button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingStaff(s);
+                            setFormData({
+                              national_id: s.national_id,
+                              full_name: s.full_name,
+                              phone: s.phone || '',
+                              role: s.role
+                            });
+                          }}
+                          className="p-1.5 bg-bg3 text-text3 rounded-lg hover:text-accent transition-colors"
+                          title="تعديل بيانات الموظف"
+                        >
+                          <Edit size={14} />
+                        </button>
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
