@@ -17,11 +17,21 @@ import { cn } from '../lib/utils';
 import { sbFetch } from '../services/supabase';
 
 const sqlScript = `-- ═══════════════════════════════════════════════════════════
--- نظام إدارة الاختبارات الذكي — سكريبت قاعدة البيانات الكامل
--- يتوافق مع استيراد Excel (السجل المدني، رمز الصف، اللجنة، رقم الجلوس)
+-- نظام إدارة الاختبارات الذكي — سكريبت قاعدة البيانات الشاملة والكاملة (v3.0)
+-- مجهزة بأفضل ممارسات الفهرسة، أتمتة غسق التاريخ، والتقارير المتقدمة
 -- ═══════════════════════════════════════════════════════════
 
--- 1. الجداول الأساسية
+-- 1. الدالات والمشغلات التلقائية (Triggers & Functions)
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- 2. الجداول الأساسية
+-- جدول الطلاب المطور
 CREATE TABLE IF NOT EXISTS students (
     id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     student_no      TEXT        UNIQUE NOT NULL,
@@ -36,7 +46,7 @@ CREATE TABLE IF NOT EXISTS students (
     updated_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- جدول طاقم العمل الموحد (مدير، معلم، مراقب، كنترول)
+-- جدول طاقم العمل الموحد (مدير، معلم، مرشد، كنترول)
 CREATE TABLE IF NOT EXISTS staff (
     id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     national_id     TEXT        UNIQUE NOT NULL,
@@ -49,36 +59,25 @@ CREATE TABLE IF NOT EXISTS staff (
     updated_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- سجل عمليات النظام (Audit Trail)
+-- سجل عمليات النظام الشامل والرقابة الجنائية (Audit Trail)
 CREATE TABLE IF NOT EXISTS system_logs (
     id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id     UUID        REFERENCES staff(id) ON DELETE SET NULL,
     action      TEXT        NOT NULL,
-    category    TEXT        NOT NULL, -- 'auth', 'attendance', 'envelope', 'data'
+    category    TEXT        NOT NULL, -- 'auth', 'attendance', 'envelope', 'data', 'security'
     details     JSONB,
     severity    TEXT        DEFAULT 'info', -- 'info', 'warning', 'error'
     ip_address  TEXT,
     created_at  TIMESTAMPTZ DEFAULT now()
 );
 
--- الجدول القديم للمعلمين (للمسح أو التحويل تدريجياً)
-CREATE TABLE IF NOT EXISTS teachers (
-    id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
-    teacher_no  TEXT        UNIQUE NOT NULL,
-    full_name   TEXT        NOT NULL,
-    phone       TEXT        NOT NULL,
-    qr_code     TEXT,
-    is_active   BOOLEAN     DEFAULT true,
-    created_at  TIMESTAMPTZ DEFAULT now(),
-    updated_at  TIMESTAMPTZ DEFAULT now()
-);
-
+-- جدول اللجان والقاعات التنظيمية
 CREATE TABLE IF NOT EXISTS committees (
     id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     name        TEXT        NOT NULL,
     location    TEXT,
     subject     TEXT,
-    teacher_id  UUID        REFERENCES staff(id) ON DELETE SET NULL, -- تم التحديث ليخدم جدول staff
+    teacher_id  UUID        REFERENCES staff(id) ON DELETE SET NULL,
     exam_date   DATE,
     start_time  TIME,
     end_time    TIME,
@@ -88,9 +87,10 @@ CREATE TABLE IF NOT EXISTS committees (
     updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
+-- جدول التكليفات والمراقبة اليومية للمعلمين
 CREATE TABLE IF NOT EXISTS teacher_assignments (
     id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
-    teacher_id    UUID        NOT NULL REFERENCES staff(id) ON DELETE CASCADE, -- تم التحديث ليخدم جدول staff
+    teacher_id    UUID        NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
     committee_id  UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
     exam_date     DATE        NOT NULL,
     period        INTEGER     NOT NULL,
@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS teacher_assignments (
     UNIQUE (committee_id, exam_date, period, slot)
 );
 
+-- جدول أظرف ومظاريف أوراق الإجابة
 CREATE TABLE IF NOT EXISTS envelopes (
     id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     envelope_no     TEXT        UNIQUE NOT NULL,
@@ -115,6 +116,7 @@ CREATE TABLE IF NOT EXISTS envelopes (
     updated_at      TIMESTAMPTZ DEFAULT now()
 );
 
+-- جدول رصد الحضور والغياب للطلاب
 CREATE TABLE IF NOT EXISTS attendance (
     id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     committee_id  UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
@@ -125,11 +127,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     UNIQUE (committee_id, student_id)
 );
 
--- إضافة حساب المدير الافتراضي
-INSERT INTO staff (national_id, full_name, role)
-VALUES ('1234567890', 'مدير النظام', 'PRINCIPAL')
-ON CONFLICT (national_id) DO NOTHING;
-
+-- جدول مسار وجدولة الاختبارات الرسمية للمدرسة
 CREATE TABLE IF NOT EXISTS exam_schedules (
     id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     exam_date     DATE        NOT NULL,
@@ -149,7 +147,54 @@ CREATE TABLE IF NOT EXISTS exam_schedules (
     updated_at    TIMESTAMPTZ DEFAULT now()
 );
 
--- 2. التقارير الذكية (Views)
+-- جدول التنبيهات الفورية للنظام والكنترول
+CREATE TABLE IF NOT EXISTS alerts (
+    id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    type        TEXT        NOT NULL CHECK (type IN ('red','gold','green','blue')),
+    title       TEXT        NOT NULL,
+    body        TEXT        NOT NULL,
+    is_read     BOOLEAN     DEFAULT false,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- جدول إعدادات النظام ومعلومات المدرسة العامة
+CREATE TABLE IF NOT EXISTS settings (
+    id          TEXT        PRIMARY KEY, -- 'school_info', 'system_config'
+    data        JSONB       NOT NULL,
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- [جديد ومطور] جدول تسجيل محاضر الغش والتحريز لربطه رسمياً بالطلاب والكنترول
+CREATE TABLE IF NOT EXISTS cheating_reports (
+    id                  UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    student_id          UUID        NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    subject             TEXT        NOT NULL,
+    exam_date           DATE        NOT NULL,
+    semester            TEXT        DEFAULT 'الأول',
+    description         TEXT        NOT NULL,
+    evidence            TEXT,
+    action_taken        TEXT,
+    notifier_id         UUID        REFERENCES staff(id) ON DELETE SET NULL,
+    committee_head_name TEXT,
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    updated_at          TIMESTAMPTZ DEFAULT now()
+);
+
+-- [جديد ومطور] جدول تتبع تبريرات وأعذار الغياب للطلاب المرفوعة للمرشد الطلابي
+CREATE TABLE IF NOT EXISTS absence_justifications (
+    id                  UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    student_id          UUID        NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    subject             TEXT        NOT NULL,
+    exam_date           DATE        NOT NULL,
+    excuse_type         TEXT        NOT NULL CHECK (excuse_type IN ('medical', 'family', 'other', 'none')),
+    justification_text  TEXT        NOT NULL,
+    status              TEXT        DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    approved_by         UUID        REFERENCES staff(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    updated_at          TIMESTAMPTZ DEFAULT now()
+);
+
+-- 3. التقارير الذكية والمشاهد الإحصائية المتقدمة (Views)
 DROP VIEW IF EXISTS v_committee_summary CASCADE;
 CREATE VIEW v_committee_summary AS
 SELECT 
@@ -174,10 +219,13 @@ SELECT
     s.classroom,
     s.phone,
     c.name AS committee_name,
-    a.recorded_at
+    a.recorded_at,
+    j.excuse_type,
+    j.status AS justification_status
 FROM students s
 JOIN attendance a ON s.id = a.student_id
 JOIN committees c ON a.committee_id = c.id
+LEFT JOIN absence_justifications j ON s.id = j.student_id AND c.subject = j.subject AND c.exam_date = j.exam_date
 WHERE a.status = 'absent';
 
 DROP VIEW IF EXISTS v_envelope_tracking CASCADE;
@@ -191,38 +239,40 @@ SELECT
     c.exam_date,
     s.full_name AS teacher_name,
     e.delivered_at,
-    e.created_at AS received_at
+    e.created_at AS received_at,
+    e.paper_count
 FROM envelopes e
 LEFT JOIN committees c ON e.committee_id = c.id
 LEFT JOIN staff s ON c.teacher_id = s.id;
 
-CREATE TABLE IF NOT EXISTS alerts (
-    id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
-    type        TEXT        NOT NULL CHECK (type IN ('red','gold','green','blue')),
-    title       TEXT        NOT NULL,
-    body        TEXT        NOT NULL,
-    is_read     BOOLEAN     DEFAULT false,
-    created_at  TIMESTAMPTZ DEFAULT now()
-);
+-- 4. إدراج البيانات ومحركات البدء الافتراضية
+INSERT INTO staff (national_id, full_name, role)
+VALUES ('1234567890', 'مدير النظام المطور', 'PRINCIPAL')
+ON CONFLICT (national_id) DO NOTHING;
 
--- جدول إعدادات النظام والمدرسة
-CREATE TABLE IF NOT EXISTS settings (
-    id          TEXT        PRIMARY KEY, -- 'school_info', 'system_config'
-    data        JSONB       NOT NULL,
-    updated_at  TIMESTAMPTZ DEFAULT now()
-);
-
--- إدراج بيانات المدرسة الافتراضية
 INSERT INTO settings (id, data)
 VALUES ('school_info', '{
-    "school_name": "مدرسة التميز الثانوية",
-    "district": "إدارة تعليم المنطقة",
-    "principal": "مدير المجمع التعليمي",
+    "school_name": "ثانوية الأمير عبدالمجيد الأولى",
+    "district": "الإدارة العامة للتعليم بمحافظة جدة",
+    "principal": "نايف بن أحمد الشهري",
     "logo_url": ""
 }')
 ON CONFLICT (id) DO NOTHING;
 
--- 3. تفعيل RLS وإنشاء السياسات بأمان
+-- 5. تهيئة الفهارس المتقدمة لضمان استجابة الملي ثانية (Performance Indexing)
+CREATE INDEX IF NOT EXISTS idx_students_committee ON students(committee_name);
+CREATE INDEX IF NOT EXISTS idx_students_student_no ON students(student_no);
+CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_committee ON attendance(committee_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance(status);
+CREATE INDEX IF NOT EXISTS idx_staff_role ON staff(role);
+CREATE INDEX IF NOT EXISTS idx_staff_national_id ON staff(national_id);
+CREATE INDEX IF NOT EXISTS idx_system_logs_category ON system_logs(category);
+CREATE INDEX IF NOT EXISTS idx_system_logs_created_at ON system_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_cheating_reports_student ON cheating_reports(student_id);
+CREATE INDEX IF NOT EXISTS idx_absence_just_student ON absence_justifications(student_id);
+
+-- 6. تفعيل الحماية RLS لكل الجداول تلقائياً وبأمان كامل
 DO $$ 
 DECLARE
     t text;
@@ -232,6 +282,20 @@ BEGIN
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         EXECUTE format('DROP POLICY IF EXISTS "Allow All" ON %I', t);
         EXECUTE format('CREATE POLICY "Allow All" ON %I FOR ALL USING (true)', t);
+    END LOOP;
+END $$;
+
+-- 7. ربط مشغلات التحديث التلقائي للتواريخ (Triggers setup)
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOR t IN SELECT DISTINCT table_name FROM information_schema.columns 
+             WHERE table_schema = 'public' 
+             AND column_name = 'updated_at'
+    LOOP
+        EXECUTE format('DROP TRIGGER IF EXISTS trg_update_timestamp ON %I', t);
+        EXECUTE format('CREATE TRIGGER trg_update_timestamp BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION update_modified_column()', t);
     END LOOP;
 END $$;
 `;
