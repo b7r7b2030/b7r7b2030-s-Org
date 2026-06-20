@@ -21,6 +21,26 @@ const sqlScript = `-- ═══════════════════�
 -- مجهزة بأفضل ممارسات الفهرسة، أتمتة غسق التاريخ، والتقارير المتقدمة
 -- ═══════════════════════════════════════════════════════════
 
+-- تهيئة قاعدة البيانات: حذف جميع الجداول والمشاهد القديمة لمنع تداخل قيود المفاتيح الأجنبية القديمة (Foreign Keys Constraints Mismatch)
+-- وضمان بدء توزيع ونظام جديد 100% متوافق بالكامل مع الهيكل الموحد.
+DROP VIEW IF EXISTS v_committee_summary CASCADE;
+DROP VIEW IF EXISTS v_absent_students CASCADE;
+DROP VIEW IF EXISTS v_envelope_tracking CASCADE;
+
+DROP TABLE IF EXISTS teacher_assignments CASCADE;
+DROP TABLE IF EXISTS attendance CASCADE;
+DROP TABLE IF EXISTS envelopes CASCADE;
+DROP TABLE IF EXISTS absence_justifications CASCADE;
+DROP TABLE IF EXISTS cheating_reports CASCADE;
+DROP TABLE IF EXISTS committees CASCADE;
+DROP TABLE IF EXISTS students CASCADE;
+DROP TABLE IF EXISTS staff CASCADE;
+DROP TABLE IF EXISTS system_logs CASCADE;
+DROP TABLE IF EXISTS exam_schedules CASCADE;
+DROP TABLE IF EXISTS alerts CASCADE;
+DROP TABLE IF EXISTS settings CASCADE;
+DROP TABLE IF EXISTS teachers CASCADE; -- تصفير وحذف جدول المعلمين القديم لعدم التعارض
+
 -- 1. الدالات والمشغلات التلقائية (Triggers & Functions)
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
@@ -32,7 +52,7 @@ $$ language 'plpgsql';
 
 -- 2. الجداول الأساسية
 -- جدول الطلاب المطور
-CREATE TABLE IF NOT EXISTS students (
+CREATE TABLE students (
     id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     student_no      TEXT        UNIQUE NOT NULL,
     full_name       TEXT        NOT NULL,
@@ -47,7 +67,7 @@ CREATE TABLE IF NOT EXISTS students (
 );
 
 -- جدول طاقم العمل الموحد (مدير، معلم، مرشد، كنترول)
-CREATE TABLE IF NOT EXISTS staff (
+CREATE TABLE staff (
     id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     national_id     TEXT        UNIQUE NOT NULL,
     full_name       TEXT        NOT NULL,
@@ -60,7 +80,7 @@ CREATE TABLE IF NOT EXISTS staff (
 );
 
 -- سجل عمليات النظام الشامل والرقابة الجنائية (Audit Trail)
-CREATE TABLE IF NOT EXISTS system_logs (
+CREATE TABLE system_logs (
     id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id     UUID        REFERENCES staff(id) ON DELETE SET NULL,
     action      TEXT        NOT NULL,
@@ -72,7 +92,7 @@ CREATE TABLE IF NOT EXISTS system_logs (
 );
 
 -- جدول اللجان والقاعات التنظيمية
-CREATE TABLE IF NOT EXISTS committees (
+CREATE TABLE committees (
     id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     name        TEXT        NOT NULL,
     location    TEXT,
@@ -88,7 +108,7 @@ CREATE TABLE IF NOT EXISTS committees (
 );
 
 -- جدول التكليفات والمراقبة اليومية للمعلمين
-CREATE TABLE IF NOT EXISTS teacher_assignments (
+CREATE TABLE teacher_assignments (
     id            UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     teacher_id    UUID        NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
     committee_id  UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
@@ -101,7 +121,7 @@ CREATE TABLE IF NOT EXISTS teacher_assignments (
 );
 
 -- جدول أظرف ومظاريف أوراق الإجابة
-CREATE TABLE IF NOT EXISTS envelopes (
+CREATE TABLE envelopes (
     id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
     envelope_no     TEXT        UNIQUE NOT NULL,
     committee_id    UUID        NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
@@ -115,6 +135,40 @@ CREATE TABLE IF NOT EXISTS envelopes (
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now()
 );
+
+-- دالة ومشغل للتزامن التلقائي لإنشاء مظروف ثابت دائم لكل لجنة جديدة بالكامل في النظام
+CREATE OR REPLACE FUNCTION sync_committee_envelope()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO envelopes (envelope_no, committee_id, status)
+    VALUES (NEW.name, NEW.id, 'pending')
+    ON CONFLICT (envelope_no) DO UPDATE SET committee_id = EXCLUDED.committee_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE 'plpgsql';
+
+DROP TRIGGER IF EXISTS trg_sync_committee_envelope ON committees;
+CREATE TRIGGER trg_sync_committee_envelope
+AFTER INSERT ON committees
+FOR EACH ROW
+EXECUTE FUNCTION sync_committee_envelope();
+
+-- دالة ومشغل للتزامن التلقائي لتحديث اسم المظروف عند تغيير اسم اللجنة
+CREATE OR REPLACE FUNCTION sync_committee_envelope_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE envelopes 
+    SET envelope_no = NEW.name
+    WHERE committee_id = NEW.id;
+    RETURN NEW;
+END;
+$$ LANGUAGE 'plpgsql';
+
+DROP TRIGGER IF EXISTS trg_sync_committee_envelope_update ON committees;
+CREATE TRIGGER trg_sync_committee_envelope_update
+AFTER UPDATE OF name ON committees
+FOR EACH ROW
+EXECUTE FUNCTION sync_committee_envelope_update();
 
 -- جدول رصد الحضور والغياب للطلاب
 CREATE TABLE IF NOT EXISTS attendance (
@@ -362,7 +416,7 @@ export const Setup: React.FC = () => {
             <button 
               onClick={async () => {
                 if(confirm('هل أنت متأكد من رغبتك في مسح جميع بيانات الطلاب؟')) {
-                  const res = await sbFetch('students', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                  const res = await sbFetch('students', 'DELETE', null, '?id=not.is.null');
                   if (res) alert('تم مسح جميع بيانات الطلاب بنجاح');
                 }
               }}
@@ -385,7 +439,7 @@ export const Setup: React.FC = () => {
             <button 
               onClick={async () => {
                 if(confirm('هل أنت متأكد من رغبتك في مسح جميع بيانات المعلمين؟')) {
-                  const res = await sbFetch('teachers', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                  const res = await sbFetch('staff', 'DELETE', null, '?role=eq.TEACHER');
                   if (res) alert('تم مسح جميع بيانات المعلمين بنجاح');
                 }
               }}
@@ -413,14 +467,14 @@ export const Setup: React.FC = () => {
                   try {
                     setTesting(true);
                     // Delete in order to respect foreign keys if any (though CASCADE is usually on)
-                    await sbFetch('attendance', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
-                    await sbFetch('envelopes', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
-                    await sbFetch('teacher_assignments', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
-                    await sbFetch('exam_schedules', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
-                    await sbFetch('committees', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
-                    await sbFetch('students', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
-                    await sbFetch('teachers', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
-                    await sbFetch('alerts', 'DELETE', null, '?id=neq.00000000-0000-0000-0000-000000000000');
+                    await sbFetch('attendance', 'DELETE', null, '?id=not.is.null');
+                    await sbFetch('envelopes', 'DELETE', null, '?id=not.is.null');
+                    await sbFetch('teacher_assignments', 'DELETE', null, '?id=not.is.null');
+                    await sbFetch('exam_schedules', 'DELETE', null, '?id=not.is.null');
+                    await sbFetch('committees', 'DELETE', null, '?id=not.is.null');
+                    await sbFetch('students', 'DELETE', null, '?id=not.is.null');
+                    await sbFetch('staff', 'DELETE', null, '?id=not.is.null');
+                    await sbFetch('alerts', 'DELETE', null, '?id=not.is.null');
                     
                     alert('تمت تهيئة النظام بنجاح. يمكنك الآن البدء في إدخال البيانات الرسمية.');
                     window.location.reload();

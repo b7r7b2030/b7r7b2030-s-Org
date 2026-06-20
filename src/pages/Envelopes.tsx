@@ -120,15 +120,25 @@ export const Envelopes: React.FC<EnvelopesProps> = ({ userRole }) => {
       try {
         parsed = JSON.parse(data);
       } catch (e) {
-        throw new Error('رمز QR غير صالح. يرجى مسح رمز المظروف.');
+        throw new Error('رمز QR غير صالح. يرجى مسح رمز المظروف أو رمز اللجنة.');
       }
 
-      if (parsed.type === 'envelope') {
-        const envelopeNo = parsed.envelope_no || parsed.id;
+      const isCompatibleType = parsed.type === 'envelope' || parsed.type === 'teacher_committee' || parsed.type === 'committee';
+      if (isCompatibleType) {
+        const idVal = parsed.id;
+        const nameVal = parsed.name || parsed.committee;
         
-        // Find envelope in current list to get committee_id
-        const env = envelopes.find(e => e.envelope_no === envelopeNo);
-        if (!env) throw new Error('المظروف غير موجود في النظام.');
+        // Dynamic matching: find physical envelope in tracking list
+        const env = envelopes.find(e => 
+          (idVal && (e.id === idVal || e.envelope_no === idVal)) || 
+          (nameVal && e.committee_name === nameVal)
+        );
+        
+        if (!env) {
+          throw new Error('المظروف التابع لهذه اللجنة غير مسجل أو غير موجود حالياً في النظام.');
+        }
+
+        const envelopeNo = env.envelope_no;
 
         // Update status to delivered
         const res = await sbFetch('envelopes', 'PATCH', {
@@ -138,11 +148,11 @@ export const Envelopes: React.FC<EnvelopesProps> = ({ userRole }) => {
         }, `?envelope_no=eq.${envelopeNo}`);
 
         if (res) {
-          alert(`تم استلام المظروف رقم ${envelopeNo} بنجاح.`);
+          alert(`تم استلام مظروف لجنة «${env.committee_name}» بنجاح في الكنترول.`);
           fetchEnvelopes();
         }
       } else {
-        throw new Error('هذا الرمز ليس رمز مظروف.');
+        throw new Error('عذراً، هذا الرمز ليس رمز مظروف أو رمز لجنة صالح.');
       }
     } catch (error: any) {
       alert(error.message || 'خطأ في معالجة الرمز');
