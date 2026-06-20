@@ -105,88 +105,113 @@ export const QRCodes: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Dynamic Style Sheet injected for perfect, standard system printing layout */}
-      {(printingItem || bulkPrintItems) && (
-        <style dangerouslySetInnerHTML={{ __html: `
-          @media print {
-            /* Hide the complete app structure */
-            #root, .space-y-6, header, nav, aside, footer, div[class*="main-layout"] {
-              display: none !important;
-            }
-            body, html {
-              background: #fff !important;
-              color: #000 !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              direction: rtl !important;
-              font-family: inherit !important;
-            }
-            .system-print-wrapper {
-              display: block !important;
-              width: 100% !important;
-              height: auto !important;
-              background: #fff !important;
-            }
-            .print-grid {
-              display: grid !important;
-              grid-template-columns: repeat(2, 1fr) !important;
-              gap: 20px !important;
-              padding: 20px !important;
-            }
-            .print-card-box {
-              border: 2px dashed #000 !important;
-              border-radius: 12px !important;
-              padding: 24px 16px !important;
-              text-align: center !important;
-              page-break-inside: avoid !important;
-              display: flex !important;
-              flex-direction: column !important;
-              align-items: center !important;
-              justify-content: center !important;
-              background: #fff !important;
-              color: #000 !important;
-            }
-            .print-card-box h4 {
-              margin: 0 0 4px 0 !important;
-              font-size: 16px !important;
-              font-weight: bold !important;
-              color: #000 !important;
-            }
-            .print-card-box p {
-              margin: 0 0 12px 0 !important;
-              font-size: 12px !important;
-              color: #555 !important;
-            }
-            .print-card-single {
-              display: flex !important;
-              flex-direction: column !important;
-              align-items: center !important;
-              justify-content: center !important;
-              height: 100vh !important;
-              background: #fff !important;
-              padding: 40px !important;
-              text-align: center !important;
-            }
-            .print-card-single h4 {
-              margin-top: 16px !important;
-              font-size: 24px !important;
-              font-weight: bold !important;
-              color: #000 !important;
-            }
-            .print-card-single p {
-              margin-top: 6px !important;
-              font-size: 14px !important;
-              color: #555 !important;
-            }
+      {/* CSS Stylesheet for perfect screen hiding and pristine system printing layout */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        /* Hide print containers completely when displaying normally on screen */
+        .system-print-wrapper {
+          display: none !important;
+        }
+
+        @media print {
+          /* Setup basic print formatting and reset default margins */
+          @page {
+            size: auto;
+            margin: 15mm;
           }
-        `}} />
-      )}
+          body, html {
+            background: #fff !important;
+            color: #000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            direction: rtl !important;
+            font-family: sans-serif !important;
+          }
+
+          /* Hide all screen interface wrappers and sidebars cleanly */
+          aside, header, nav, footer, button, select, [class*="print:hidden"], label {
+            display: none !important;
+          }
+
+          /* Hide standard non-print child elements on this page */
+          .space-y-6 > div:not(.system-print-wrapper) {
+            display: none !important;
+          }
+
+          /* Force display and position for the system print wrapper during printing */
+          .system-print-wrapper {
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            background: #fff !important;
+          }
+          
+          /* Force block displays inside print wrapper to override potential hides */
+          .system-print-wrapper h4, 
+          .system-print-wrapper p, 
+          .system-print-wrapper div {
+            display: block !important;
+          }
+
+          .print-grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 24px !important;
+            padding: 10px !important;
+            background: #fff !important;
+          }
+          .print-card-box {
+            border: 2px dashed #000 !important;
+            border-radius: 12px !important;
+            padding: 24px 16px !important;
+            text-align: center !important;
+            page-break-inside: avoid !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: #fff !important;
+            color: #000 !important;
+          }
+          .print-card-box h4 {
+            margin: 0 0 6px 0 !important;
+            font-size: 16px !important;
+            font-weight: bold !important;
+            color: #000 !important;
+          }
+          .print-card-box p {
+            margin: 0 0 12px 0 !important;
+            font-size: 12px !important;
+            color: #444 !important;
+          }
+          .print-card-single {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            height: 90vh !important;
+            background: #fff !important;
+            padding: 40px !important;
+            text-align: center !important;
+          }
+          .print-card-single h4 {
+            margin-top: 24px !important;
+            font-size: 26px !important;
+            font-weight: bold !important;
+            color: #000 !important;
+          }
+          .print-card-single p {
+            margin-top: 8px !important;
+            font-size: 16px !important;
+            color: #444 !important;
+          }
+        }
+      `}} />
 
       {/* Rendering DOM Area for Printer Capture */}
       {printingItem && (
-        <div className="hidden system-print-wrapper">
+        <div className="system-print-wrapper">
           <div className="print-card-single">
-            <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #000' }}>
+            <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #000', display: 'inline-block' }}>
               <QRCodeSVG value={printingItem.qrValue} size={250} />
             </div>
             <h4>{printingItem.title}</h4>
@@ -196,11 +221,11 @@ export const QRCodes: React.FC = () => {
       )}
 
       {bulkPrintItems && (
-        <div className="hidden system-print-wrapper">
+        <div className="system-print-wrapper">
           <div className="print-grid">
             {bulkPrintItems.map((item, idx) => (
               <div key={idx} className="print-card-box">
-                <div style={{ background: '#fff', padding: '8px', borderRadius: '8px', marginBottom: '10px' }}>
+                <div style={{ background: '#fff', padding: '8px', borderRadius: '8px', marginBottom: '10px', display: 'inline-block', border: '1px solid #ddd' }}>
                   <QRCodeSVG value={item.qrValue} size={110} />
                 </div>
                 <h4>{item.title}</h4>
