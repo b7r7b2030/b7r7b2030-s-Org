@@ -88,6 +88,16 @@ export const TeacherAssignment: React.FC = () => {
     );
 
     const newAssignments = [...assignments];
+
+    if (!teacherId || teacherId === '') {
+      // If empty selection ("اختر معلماً..."), remove the assignment from the state representation
+      if (existingIndex >= 0) {
+        newAssignments.splice(existingIndex, 1);
+      }
+      setAssignments(newAssignments);
+      return;
+    }
+
     const assignment: Assignment = {
       teacher_id: teacherId,
       committee_id: committeeId,
@@ -114,33 +124,49 @@ export const TeacherAssignment: React.FC = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Clear current assignments for this date/period and re-insert
-      await sbFetch('teacher_assignments', 'DELETE', null, `?exam_date=eq.${selectedDate}&period=eq.${selectedPeriod}`);
+      // 1. Delete previous assignments for this specific date and period
+      const deleteResult = await sbFetch('teacher_assignments', 'DELETE', null, `?exam_date=eq.${selectedDate}&period=eq.${selectedPeriod}`);
+      if (deleteResult === null) {
+        throw new Error('تعذر تفريغ التكليفات السابقة لقاعدة البيانات. قد تكون هناك مشكلة بالاتصال.');
+      }
       
+      // 2. Prepare only valid assignments containing clean, non-empty fields to insert
       const toSave = assignments
-        .filter(a => a.exam_date === selectedDate && a.period === selectedPeriod)
-        .map(({ id, ...rest }) => rest);
+        .filter(a => a.exam_date === selectedDate && a.period === selectedPeriod && a.teacher_id && a.teacher_id !== '')
+        .map(a => ({
+          teacher_id: a.teacher_id,
+          committee_id: a.committee_id,
+          exam_date: a.exam_date,
+          period: a.period,
+          slot: a.slot
+        }));
 
       if (toSave.length > 0) {
-        await sbFetch('teacher_assignments', 'POST', toSave);
+        const postResult = await sbFetch('teacher_assignments', 'POST', toSave);
+        if (postResult === null) {
+          throw new Error('حدث خطأ أثناء إدخال التكليفات الجديدة لقاعدة البيانات. يرجى التأكد من عدم تكرار تكليف المعلم في نفس الفترة.');
+        }
       }
 
       // Update semester/year in schedules for this date
       const scheduleIds = schedules.filter(s => s.exam_date === selectedDate).map(s => s.id);
       for (const id of scheduleIds) {
-        await sbFetch('exam_schedules', 'PATCH', { 
+        const patchResult = await sbFetch('exam_schedules', 'PATCH', { 
           semester, 
           academic_year: academicYear,
           vice_principal: vicePrincipal,
           principal: principal
         }, `?id=eq.${id}`);
+        if (patchResult === null) {
+          throw new Error('حدث خطأ أثناء تحديث معلومات اليوم الدراسي والتوقيعات.');
+        }
       }
       
-      alert('تم حفظ توزيع المعلمين بنجاح');
+      alert('تم حفظ توزيع المعلمين بنجاح وكتابته في قاعدة البيانات.');
       fetchData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Save error:", error);
-      alert('حدث خطأ أثناء الحفظ');
+      alert(error?.message || 'حدث خطأ أثناء الحفظ، يرجى مراجعة البيانات والمحاولة مرة أخرى.');
     }
     setSaving(false);
   };
