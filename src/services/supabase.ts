@@ -8,13 +8,17 @@ const headers = {
   'Prefer': 'return=representation'
 };
 
+export let lastFetchError: string | null = null;
+
 export async function sbFetch<T>(table: string, method: string = 'GET', body: any = null, params: string = ''): Promise<T[] | null> {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.error("Supabase credentials missing. Please check your environment variables.");
+    lastFetchError = "Supabase credentials missing";
     return null;
   }
 
   try {
+    lastFetchError = null;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${params}`, {
       method,
       headers,
@@ -23,6 +27,7 @@ export async function sbFetch<T>(table: string, method: string = 'GET', body: an
 
     if (!res.ok) {
       const errorText = await res.text();
+      lastFetchError = errorText;
       throw new Error(errorText);
     }
 
@@ -34,8 +39,11 @@ export async function sbFetch<T>(table: string, method: string = 'GET', body: an
     }
     
     return [] as T[];
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Supabase Error (${table}):`, error);
+    if (!lastFetchError) {
+      lastFetchError = error?.message || String(error);
+    }
     return null;
   }
 }

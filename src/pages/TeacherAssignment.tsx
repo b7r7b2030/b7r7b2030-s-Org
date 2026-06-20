@@ -20,7 +20,7 @@ import {
 import { cn } from '../lib/utils';
 import * as XLSX from 'xlsx';
 import { Teacher, Committee, TeacherAssignment as Assignment, ExamSchedule } from '../types';
-import { sbFetch } from '../services/supabase';
+import { sbFetch, lastFetchError } from '../services/supabase';
 
 export const TeacherAssignment: React.FC = () => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -124,13 +124,7 @@ export const TeacherAssignment: React.FC = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // 1. Delete previous assignments for this specific date and period
-      const deleteResult = await sbFetch('teacher_assignments', 'DELETE', null, `?exam_date=eq.${selectedDate}&period=eq.${selectedPeriod}`);
-      if (deleteResult === null) {
-        throw new Error('تعذر تفريغ التكليفات السابقة لقاعدة البيانات. قد تكون هناك مشكلة بالاتصال.');
-      }
-      
-      // 2. Prepare only valid assignments containing clean, non-empty fields to insert
+      // 1. Prepare and filter active assignments for this specific date and period
       const toSave = assignments
         .filter(a => a.exam_date === selectedDate && a.period === selectedPeriod && a.teacher_id && a.teacher_id !== '')
         .map(a => ({
@@ -141,14 +135,33 @@ export const TeacherAssignment: React.FC = () => {
           slot: a.slot
         }));
 
+      // 1.5 Client-side Validation: Verify that NO teacher is duplicated within the daily period configuration
+      const teacherIds = toSave.map(a => a.teacher_id);
+      const duplicateTeacherIds = teacherIds.filter((id, idx) => teacherIds.indexOf(id) !== idx);
+      
+      if (duplicateTeacherIds.length > 0) {
+        const dupTeacherNames = duplicateTeacherIds.map(id => {
+          const t = teachers.find(teach => teach.id === id);
+          return t ? `«${t.full_name}»` : 'معلم غير معروف';
+        }).join(' و ');
+        throw new Error(`خطأ تكرار توزيع: تم تعيين المعلم ${dupTeacherNames} في أكثر من لجنة أو خانة مراقبة في نفس الفترة! يرجى مراجعة التوزيع وتصحيحه بحيث لا يتكرر المراقب قبل الحفظ.`);
+      }
+
+      // 2. Delete previous assignments for this specific date and period
+      const deleteResult = await sbFetch('teacher_assignments', 'DELETE', null, `?exam_date=eq.${selectedDate}&period=eq.${selectedPeriod}`);
+      if (deleteResult === null) {
+        throw new Error(`عفواً، تعذر تفريغ التكليفات السابقة في قاعدة البيانات. قد تكون هناك مشكلة بالاتصال أو الأذونات.\nالتفاصيل: ${lastFetchError || 'استجابة فارغة'}`);
+      }
+
+      // 3. Write new assignments to database
       if (toSave.length > 0) {
         const postResult = await sbFetch('teacher_assignments', 'POST', toSave);
         if (postResult === null) {
-          throw new Error('حدث خطأ أثناء إدخال التكليفات الجديدة لقاعدة البيانات. يرجى التأكد من عدم تكرار تكليف المعلم في نفس الفترة.');
+          throw new Error(`حدث خطأ أثناء إدخال التكليفات الجديدة لقاعدة البيانات.\nيرجى التأكد من عدم تكرار تكليف المعلم في نفس الفترة.\nالتفاصيل الفنية لقاعدة البيانات: ${lastFetchError || 'عدم توافق القيود UNIQUE'}`);
         }
       }
 
-      // Update semester/year in schedules for this date
+      // 4. Update semester/year in academic schedules for this date
       const scheduleIds = schedules.filter(s => s.exam_date === selectedDate).map(s => s.id);
       for (const id of scheduleIds) {
         const patchResult = await sbFetch('exam_schedules', 'PATCH', { 
@@ -158,7 +171,7 @@ export const TeacherAssignment: React.FC = () => {
           principal: principal
         }, `?id=eq.${id}`);
         if (patchResult === null) {
-          throw new Error('حدث خطأ أثناء تحديث معلومات اليوم الدراسي والتوقيعات.');
+          throw new Error(`حدث خطأ أثناء تحديث معلومات اليوم الدراسي والتوقيعات.\nالتفاصيل: ${lastFetchError || 'فشل عملية PATCH'}`);
         }
       }
       
@@ -166,7 +179,41 @@ export const TeacherAssignment: React.FC = () => {
       fetchData();
     } catch (error: any) {
       console.error("Save error:", error);
-      alert(error?.message || 'حدث خطأ أثناء الحفظ، يرجى مراجعة البيانات والمحاولة مرة أخرى.');
+      alert(error?.message || 'حدث خطأ غير متوقع أثناء الحفظ، يرجى المحاولة مرة أخرى.');
+    }
+    setSaving(false);
+  };
+
+  const handleClearCurrentPeriod = () => {
+    if (window.confirm('هل أنت متأكد من رغبتك في تفريغ تكليفات هذه الفترة بالكامل من الشاشة الحالية؟\n(ملاحظة: تحتاج إلى النقر فوق زر "حفظ التوزيع" بعد ذلك ليتم تطبيق الحذف رسمياً في قاعدة البيانات).')) {
+      const remaining = assignments.filter(
+        a => !(a.exam_date === selectedDate && a.period === selectedPeriod)
+      );
+      setAssignments(remaining);
+      alert('تم تفريغ تكليفات هذا اليوم والفترة مؤقتاً في الشاشة. يرجى النقر على "حفظ التوزيع" لتأكيد وإرسال التعديل إلى قاعدة البيانات.');
+    }
+  };
+
+  const handleResetAllAssignments = async () => {
+    const doubleConfirm = window.confirm('⚠️ تحذير أمني خطير للغاية:\nهل أنت متأكد تماماً من رغبتك في مسح وإفراغ نظام التوزيع بالكامل؟\nسيؤدي هذا الإجراء إلى حذف جميع التكليفات لجميع المعلمين وفي كافة الأيام والفترات نهائياً من قاعدة البيانات للبدء من الصفر! لا يمكن التراجع عن هذا.');
+    if (!doubleConfirm) return;
+
+    const tripleConfirm = window.confirm('إجراء أخير للتأكيد:\nأكتب كلمة "نعم" أو اضغط موافق لمسح النظام بالكامل والبدء من جديد.');
+    if (!tripleConfirm) return;
+
+    setSaving(true);
+    try {
+      // Direct bulk deletion using a not.is.null filter to bypass PostgREST safety checks
+      const deleteResult = await sbFetch('teacher_assignments', 'DELETE', null, '?id=not.is.null');
+      if (deleteResult === null) {
+        throw new Error(`فشل مسح البيانات بالكامل من السيرفر.\nالتفاصيل: ${lastFetchError || 'مشكلة في الإرسال'}`);
+      }
+      setAssignments([]);
+      alert('🎉 تم مسح وتصفير كافة تكليفات التوزيع بالكامل من قاعدة البيانات بنجاح!\nيمكنك الآن البدء من جديد وتوزيع التكليفات بحرية.');
+      fetchData();
+    } catch (error: any) {
+      console.error("Reset error:", error);
+      alert(error?.message || 'عذراً، حدث خطأ أثناء التصفير الشامل.');
     }
     setSaving(false);
   };
@@ -555,36 +602,57 @@ export const TeacherAssignment: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-2 mt-auto">
+            <div className="flex flex-wrap gap-2 mt-auto">
               <button 
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-accent text-white font-bold px-6 py-2.5 rounded-xl hover:bg-accent/90 transition-all flex items-center gap-2 shadow-lg shadow-accent/20"
+                className="bg-accent text-white font-bold px-6 py-2.5 rounded-xl hover:bg-accent/90 transition-all flex items-center gap-2 shadow-lg shadow-accent/20 cursor-pointer"
               >
                 {saving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
                 حفظ التوزيع
               </button>
               <button 
                 onClick={handleAutoSend}
-                className="bg-indigo-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-900/20"
+                className="bg-indigo-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg shadow-indigo-900/20 cursor-pointer"
               >
                 <MessageSquare size={18} />
                 الإرسال الذكي (تلقائي)
               </button>
               <button 
                 onClick={exportForBulkWhatsApp}
-                className="bg-green-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-green-700 transition-all flex items-center gap-2 shadow-lg shadow-green-900/20"
+                className="bg-green-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-green-700 transition-all flex items-center gap-2 shadow-lg shadow-green-900/20 cursor-pointer"
               >
                 <Download size={18} />
                 تصدير للواتساب الجماعي
               </button>
               <button 
                 onClick={() => setPrintMode(true)}
-                className="bg-gold text-black font-bold px-6 py-2.5 rounded-xl hover:bg-gold/90 transition-all flex items-center gap-2 shadow-lg shadow-gold/20"
+                className="bg-gold text-black font-bold px-6 py-2.5 rounded-xl hover:bg-gold/90 transition-all flex items-center gap-2 shadow-lg shadow-gold/20 cursor-pointer"
               >
                 <Printer size={18} />
                 طباعة التقرير
               </button>
+
+              {/* Danger Zone Controls */}
+              <div className="flex gap-2 border-r border-border pr-2 mr-2">
+                <button 
+                  onClick={handleClearCurrentPeriod}
+                  title="تفريغ التوزيع مؤقتاً لهذه الفترة فقط من الشاشة"
+                  className="bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 font-bold px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 size={16} />
+                  تفريغ الفترة
+                </button>
+                <button 
+                  onClick={handleResetAllAssignments}
+                  disabled={saving}
+                  title="حذف جميع التوزيعات والبدء من جديد بالكامل"
+                  className="bg-red-600 text-white hover:bg-red-700 font-bold px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 shadow-lg shadow-red-900/20 cursor-pointer"
+                >
+                  <RefreshCw size={16} className={saving ? "animate-spin" : ""} />
+                  إعادة ضبط النظام
+                </button>
+              </div>
             </div>
           </div>
         </div>
